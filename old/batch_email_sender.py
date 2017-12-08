@@ -1,11 +1,10 @@
 import xlrd
 import getpass
-from envelopes import Envelope, GMailSMTP
+from envelopes import  GMailSMTP
 from random import choice
 from sys import exit
 import os
 import tempfile
-import shutil
 import yagmail
 import time
 
