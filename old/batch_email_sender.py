@@ -1,6 +1,6 @@
 import xlrd
 import getpass
-from envelopes import  GMailSMTP
+from envelopes import GMailSMTP
 from random import choice
 from sys import exit
 import os
