@@ -1,6 +1,6 @@
 import sys
 import os
-import test1
+import test
 import xlrd
 from PyQt5.Qt import *
 
@@ -91,7 +91,7 @@ def openfile():
 
 app = QApplication(sys.argv)
 w = QMainWindow()
-ui = test1.Ui_MainWindow()
+ui = test.Ui_MainWindow()
 ui.setupUi(w)
 w.show()
 ui.pushButton.clicked.connect(openfile)
