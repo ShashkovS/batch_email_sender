@@ -1,11 +1,11 @@
 import sys
 import os
-import test
+import ui2 as GUI
 import xlrd
 from PyQt5.Qt import *
 
 
-def rtv_template(template_name):
+def rtv_template(template_name, uiconf):
     try:
         with open(template_name, encoding='utf-8') as f:
             template = f.read()
@@ -78,20 +78,28 @@ def check_template_vs_table(template, table):
 
 
 def openfile():
+    def update_temp(item):
+        for i in range(ui.listWidget.count()):
+            if ui.listWidget.item(i) == item:
+                ui.textBrowser.setText(template.format(**table[i]))
+
     options = QFileDialog.Options()
     filename, _ = QFileDialog.getOpenFileName(caption='Выберите конфиг', directory='', filter='All files(*)',
                                                         options=options)
 
     settings = rtv_settings(filename)
-    template = rtv_template(settings['email_template'])
+    template = rtv_template(settings['email_template'], ui)
     table = rtv_table(settings['email_list'])
-    print(table)
     check_template_vs_table(template, table)
-
+    ui.textBrowser.setText(template.format(**table[0]))
+    for i in table:
+        item = QListWidgetItem(' '.join([i['ID'],i['Фамилия'],i['Имя']]))
+        ui.listWidget.addItem(item)
+    ui.listWidget.itemClicked.connect(update_temp)
 
 app = QApplication(sys.argv)
 w = QMainWindow()
-ui = test.Ui_MainWindow()
+ui = GUI.Ui_MainWindow()
 ui.setupUi(w)
 w.show()
 ui.pushButton.clicked.connect(openfile)
