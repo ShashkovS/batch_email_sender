@@ -16,7 +16,7 @@ def rtv_template(template_name, uiconf):
                 template = f.read()
         except FileNotFoundError:
             print('Файл с шаблоном email_template.txt не найден')
-            exit(1)
+            return False
     # ask(template, 'Это правильный шаблон?')
     # template = template.replace('\n', ' ')
     return template
@@ -27,8 +27,8 @@ def rtv_settings(email_settings):
         with open(email_settings, encoding='utf-8') as f:
             settings_rows = f.readlines()
     except FileNotFoundError:
-        print('Файл с настойками email_settings.txt не найден')
-        exit(1)
+        print('Файл с настройками email_settings.txt не найден')
+        return False
 
     settings = {'FromMail': None, 'gmail/yandex': None, 'FromName': None, 'email_template': None, 'email_list': None}
     for key in settings:
@@ -38,10 +38,10 @@ def rtv_settings(email_settings):
     for key, val in settings.items():
         if not val:
             print(f'В файле {email_settings} не заполнен параметр', key)
-            exit(1)
+            return False
     if settings['gmail/yandex'] not in ['gmail', 'yandex']:
         print('В качестве почты (настройка gmail/yandex) поддерживается пока только yandex и gmail')
-        exit(1)
+        return False
     # ask(settings, 'Настройки для отправки в норме?')
     return settings
 
@@ -72,9 +72,10 @@ def check_template_vs_table(template, table):
     if table:
         try:
             dummy = (template + '{email}{subject}').format(**table[0])
+            return True
         except KeyError as e:
             print('Поля', e, 'из шаблона нет в таблице')
-            exit(1)
+            return False
 
 
 def openfile():
@@ -90,12 +91,15 @@ def openfile():
     settings = rtv_settings(filename)
     template = rtv_template(settings['email_template'], ui)
     table = rtv_table(settings['email_list'])
-    check_template_vs_table(template, table)
-    ui.textBrowser.setText(template.format(**table[0]))
-    for i in table:
-        item = QListWidgetItem(' '.join([i['ID'],i['Фамилия'],i['Имя']]))
-        ui.listWidget.addItem(item)
-    ui.listWidget.itemClicked.connect(update_temp)
+    res = check_template_vs_table(template, table)
+    if res and template and table:
+        ui.textBrowser.setText(template.format(**table[0]))
+        for i in table:
+            item = QListWidgetItem(' '.join([i['ID'],i['Фамилия'],i['Имя']]))
+            ui.listWidget.addItem(item)
+            item.setCheckState(Qt.Checked)
+        ui.listWidget.itemClicked.connect(update_temp)
+
 
 app = QApplication(sys.argv)
 w = QMainWindow()
