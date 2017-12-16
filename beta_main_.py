@@ -1,9 +1,20 @@
 import sys
 import os
 import ui2 as GUI
+import log2 as LoginForm
 import xlrd
+import smtplib
+from os.path import basename
+from email.mime.application import MIMEApplication
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import COMMASPACE, formatdate
 from PyQt5.Qt import *
 
+
+CONFIG = ''
+TEMPLATE = ''
+TABLE = ''
 
 def rtv_template(template_name, uiconf):
     try:
@@ -79,6 +90,7 @@ def check_template_vs_table(template, table):
 
 
 def openfile():
+    global CONFIG, TABLE, TEMPLATE
     def update_temp(item):
         for i in range(ui.listWidget.count()):
             if ui.listWidget.item(i) == item:
@@ -88,9 +100,9 @@ def openfile():
     filename, _ = QFileDialog.getOpenFileName(caption='Выберите конфиг', directory='', filter='All files(*)',
                                                         options=options)
 
-    settings = rtv_settings(filename)
-    template = rtv_template(settings['email_template'], ui)
-    table = rtv_table(settings['email_list'])
+    CONFIG = settings = rtv_settings(filename)
+    TEMPLATE = template = rtv_template(settings['email_template'], ui)
+    TABLE = table = rtv_table(settings['email_list'])
     res = check_template_vs_table(template, table)
     if res and template and table:
         ui.textBrowser.setText(template.format(**table[0]))
@@ -101,10 +113,59 @@ def openfile():
         ui.listWidget.itemClicked.connect(update_temp)
 
 
+def send_mail(send_from, send_to, subject, text, login, password, files=None,
+              server='127.0.0.1'):
+    assert isinstance(send_to, list)
+    msg = MIMEMultipart()
+    msg['From'] = send_from
+    msg['To'] = COMMASPACE.join(send_to)
+    msg['Date'] = formatdate(localtime=True)
+    msg['Subject'] = subject
+    msg.attach(MIMEText(text, 'html'))
+    for f in files or []:
+        with open(f, "rb") as fil:
+            part = MIMEApplication(
+                fil.read(),
+                Name=basename(f)
+            )
+        # After the file is closed
+        part['Content-Disposition'] = 'attachment; filename="%s"' % basename(f)
+        msg.attach(part)
+    smtp = smtplib.SMTP(server)
+    smtp.starttls()
+    smtp.login(login, password)
+    smtp.sendmail(send_from, send_to, msg.as_string())
+    smtp.close()
+
+
+def send_msg():
+    if CONFIG['gmail/yandex'] == 'yandex':
+        mailserver = 'smtp.' + CONFIG['gmail/yandex'] + '.ru'
+    elif CONFIG['gmail/yandex'] == 'gmail':
+        mailserver = 'smtp.' + CONFIG['gmail/yandex'] + '.com'
+    else:
+        raise NotImplementedError
+    frommail = CONFIG['FromMail']
+    fromname = CONFIG['FromName']
+    print(mailserver, frommail, fromname)
+    loginf = QDialog()
+    diagui = LoginForm.Ui_Dialog()
+    diagui.setupUi(loginf)
+    print(loginf.exec_())
+    login = diagui.lineEdit.text()
+    passw = diagui.lineEdit_2.text()
+    print(login, passw)
+    for i in range(ui.listWidget.count()):
+        if ui.listWidget.item(i).checkState():
+            send_mail(frommail, [TABLE[i]['email']] , TABLE[i]['subject'], TEMPLATE.format(**TABLE[i]), login, passw,
+                      [TABLE[i]['attach1'], TABLE[i]['attach2']],
+                      mailserver)
+
 app = QApplication(sys.argv)
 w = QMainWindow()
 ui = GUI.Ui_MainWindow()
 ui.setupUi(w)
 w.show()
 ui.pushButton.clicked.connect(openfile)
+ui.pushButton_2.clicked.connect(send_msg)
 sys.exit(app.exec_())

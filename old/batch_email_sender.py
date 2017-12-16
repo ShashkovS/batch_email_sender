@@ -10,7 +10,7 @@ import time
 
 OKS = ['ok', 'good', 'yes', 'sure']
 
-os.chdir(r'C:\Dropbox\M2021\Собеседование в 7-й класс, 2017\Письма поступающим')
+# os.chdir(r'C:\Dropbox\M2021\Собеседование в 7-й класс, 2017\Письма поступающим')
 email_settings = r'res_next_email_settings.txt'
 
 # ONLY_ONE = True
