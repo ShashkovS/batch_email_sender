@@ -16,7 +16,8 @@ CONFIG = ''
 TEMPLATE = ''
 TABLE = ''
 
-def rtv_template(template_name, uiconf):
+
+def rtv_template(template_name):
     try:
         with open(template_name, encoding='utf-8') as f:
             template = f.read()
@@ -62,7 +63,7 @@ def rtv_table(xls_name):
         xl_workbook = xlrd.open_workbook(xls_name)
     except FileNotFoundError:
         print(f'Файл {xls_name} не найден')
-        exit(1)
+        return False
     xl_sheet = xl_workbook.sheet_by_index(0)
     columns = {}
     for i in range(xl_sheet.ncols):
@@ -101,20 +102,21 @@ def openfile():
                                                         options=options)
 
     CONFIG = settings = rtv_settings(filename)
-    TEMPLATE = template = rtv_template(settings['email_template'], ui)
+    TEMPLATE = template = rtv_template(settings['email_template'])
     TABLE = table = rtv_table(settings['email_list'])
     res = check_template_vs_table(template, table)
     if res and template and table:
         ui.textBrowser.setText(template.format(**table[0]))
+        ui.listWidget_2.addItems([table[0]['attach1'], table[0]['attach2']])
         for i in table:
             item = QListWidgetItem(' '.join([i['ID'],i['Фамилия'],i['Имя']]))
             ui.listWidget.addItem(item)
             item.setCheckState(Qt.Checked)
         ui.listWidget.itemClicked.connect(update_temp)
+        ui.listWidget_2.itemClicked.connect()
 
 
-def send_mail(send_from, send_to, subject, text, login, password, files=None,
-              server='127.0.0.1'):
+def send_mail(send_from, sender_name, send_to, subject, text, smtp, files=None):
     assert isinstance(send_to, list)
     msg = MIMEMultipart()
     msg['From'] = send_from
@@ -131,35 +133,48 @@ def send_mail(send_from, send_to, subject, text, login, password, files=None,
         # After the file is closed
         part['Content-Disposition'] = 'attachment; filename="%s"' % basename(f)
         msg.attach(part)
+    smtp.sendmail(send_from, send_to, msg.as_string())
+
+
+def connect_to_server(server, login, password):
     smtp = smtplib.SMTP(server)
     smtp.starttls()
     smtp.login(login, password)
-    smtp.sendmail(send_from, send_to, msg.as_string())
-    smtp.close()
+    smtp.ehlo()
+    return smtp
 
 
 def send_msg():
     if CONFIG['gmail/yandex'] == 'yandex':
-        mailserver = 'smtp.' + CONFIG['gmail/yandex'] + '.ru'
+        mailserver = 'smtp.yandex.ru'
     elif CONFIG['gmail/yandex'] == 'gmail':
-        mailserver = 'smtp.' + CONFIG['gmail/yandex'] + '.com'
+        mailserver = 'smtp.googlemail.com'
     else:
-        raise NotImplementedError
+        raise NotImplementedError # Пока не включены в список
     frommail = CONFIG['FromMail']
     fromname = CONFIG['FromName']
-    print(mailserver, frommail, fromname)
+
     loginf = QDialog()
     diagui = LoginForm.Ui_Dialog()
     diagui.setupUi(loginf)
-    print(loginf.exec_())
+    loginf.exec_()
     login = diagui.lineEdit.text()
     passw = diagui.lineEdit_2.text()
-    print(login, passw)
+
+    try:
+        smtp = connect_to_server(mailserver, login, passw)
+    except smtplib.SMTPAuthenticationError:
+        QMessageBox.warning(w, 'Ошибка', 'Неправильный логин/пароль')
+        return
+    except:
+        QMessageBox.warning(w, 'Ошибка', 'Не могу подключиться к серверу')
+        return
+    del passw
     for i in range(ui.listWidget.count()):
         if ui.listWidget.item(i).checkState():
-            send_mail(frommail, [TABLE[i]['email']] , TABLE[i]['subject'], TEMPLATE.format(**TABLE[i]), login, passw,
-                      [TABLE[i]['attach1'], TABLE[i]['attach2']],
-                      mailserver)
+            send_mail(frommail, fromname, [TABLE[i]['email']], TABLE[i]['subject'], TEMPLATE.format(**TABLE[i]),
+                      smtp, ['dummy.py'])
+
 
 app = QApplication(sys.argv)
 w = QMainWindow()
