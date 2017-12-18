@@ -4,6 +4,7 @@ import ui2 as GUI
 import log2 as LoginForm
 import xlrd
 import smtplib
+import subprocess
 from os.path import basename
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
@@ -90,8 +91,20 @@ def check_template_vs_table(template, table):
             return False
 
 
+def open_attach(item):
+    for i in range(ui.listWidget_2.count()):
+        if ui.listWidget_2.item(i) == item:
+            if sys.platform.startswith('darwin'):
+                subprocess.call(('open', item.text()))
+            elif os.name == 'nt':
+                os.startfile(item.text())
+            elif os.name == 'posix':
+                subprocess.call(('xdg-open', item.text()))
+
+
 def openfile():
     global CONFIG, TABLE, TEMPLATE
+
     def update_temp(item):
         for i in range(ui.listWidget.count()):
             if ui.listWidget.item(i) == item:
@@ -113,7 +126,7 @@ def openfile():
             ui.listWidget.addItem(item)
             item.setCheckState(Qt.Checked)
         ui.listWidget.itemClicked.connect(update_temp)
-        # ui.listWidget_2.itemClicked.connect()
+        ui.listWidget_2.itemClicked.connect(open_attach)
 
 
 def send_mail(send_from, sender_name, send_to, subject, text, smtp, files=None):
@@ -172,7 +185,7 @@ def send_msg():
         for i in range(ui.listWidget.count()):
             if ui.listWidget.item(i).checkState():
                 send_mail(frommail, fromname, [TABLE[i]['email']], TABLE[i]['subject'], TEMPLATE.format(**TABLE[i]),
-                          smtp, ['dummy.py'])
+                          smtp, [TABLE[i]['attach1'], TABLE[i]['attach2']])
 
 
 app = QApplication(sys.argv)
