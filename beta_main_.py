@@ -113,7 +113,7 @@ def openfile():
             ui.listWidget.addItem(item)
             item.setCheckState(Qt.Checked)
         ui.listWidget.itemClicked.connect(update_temp)
-        ui.listWidget_2.itemClicked.connect()
+        # ui.listWidget_2.itemClicked.connect()
 
 
 def send_mail(send_from, sender_name, send_to, subject, text, smtp, files=None):
@@ -157,23 +157,22 @@ def send_msg():
     loginf = QDialog()
     diagui = LoginForm.Ui_Dialog()
     diagui.setupUi(loginf)
-    loginf.exec_()
-    login = diagui.lineEdit.text()
-    passw = diagui.lineEdit_2.text()
-
-    try:
-        smtp = connect_to_server(mailserver, login, passw)
-    except smtplib.SMTPAuthenticationError:
-        QMessageBox.warning(w, 'Ошибка', 'Неправильный логин/пароль')
-        return
-    except:
-        QMessageBox.warning(w, 'Ошибка', 'Не могу подключиться к серверу')
-        return
-    del passw
-    for i in range(ui.listWidget.count()):
-        if ui.listWidget.item(i).checkState():
-            send_mail(frommail, fromname, [TABLE[i]['email']], TABLE[i]['subject'], TEMPLATE.format(**TABLE[i]),
-                      smtp, ['dummy.py'])
+    if loginf.exec_() == QDialog.Accepted:
+        login = diagui.lineEdit.text()
+        passw = diagui.lineEdit_2.text()
+        try:
+            smtp = connect_to_server(mailserver, login, passw)
+        except smtplib.SMTPAuthenticationError:
+            QMessageBox.warning(w, 'Ошибка', 'Неправильный логин/пароль')
+            return
+        except:
+            QMessageBox.warning(w, 'Ошибка', 'Не могу подключиться к серверу')
+            return
+        del passw
+        for i in range(ui.listWidget.count()):
+            if ui.listWidget.item(i).checkState():
+                send_mail(frommail, fromname, [TABLE[i]['email']], TABLE[i]['subject'], TEMPLATE.format(**TABLE[i]),
+                          smtp, ['dummy.py'])
 
 
 app = QApplication(sys.argv)
