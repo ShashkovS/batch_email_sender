@@ -22,12 +22,32 @@ class Worker(QObject):
     sig_done = pyqtSignal(int)  # worker id: emitted at end of work()
     sig_msg = pyqtSignal(str)  # message to be shown to user
 
-    def __init__(self, id: int):
+    def __init__(self, id: int, table, template, frommail, fromname, listwidget, server, login, password):
         super().__init__()
         self.__id = id
         self.__abort = False
+        self.TABLE = table
+        self.TEMPLATE = template
+        self.frommail = frommail
+        self.fromname = fromname
+        self.listWidget = listwidget
+        try:
+            self.smtp = self.connect_to_server(server, login, password)
+        except smtplib.SMTPAuthenticationError:
+            QMessageBox.warning(self.listWidget.parent(), 'Ошибка', 'Неправильный логин/пароль')
+            return
+        except:
+            QMessageBox.warning(self.listWidget.parent(), 'Ошибка', 'Не могу подключиться к серверу')
+            return
 
-    def set_mail_and_smtp_instance(self, send_from, sender_name, send_to, subject, text, smtp, files=None):
+    def connect_to_server(self, server, login, password):
+        smtp = smtplib.SMTP(server)
+        smtp.starttls()
+        smtp.login(login, password)
+        smtp.ehlo()
+        return smtp
+
+    def set_mail(self, send_from, sender_name, send_to, subject, text, files=None):
         assert isinstance(send_to, list)
         self.msg = MIMEMultipart()
         self.msg['From'] = send_from
@@ -46,7 +66,6 @@ class Worker(QObject):
             # After the file is closed
             part['Content-Disposition'] = 'attachment; filename="%s"' % basename(f)
             self.msg.attach(part)
-        self.smtp = smtp
         self.send_from = send_from
         self.send_to = send_to
         # smtp.sendmail(send_from, send_to, self.msg.as_string())
@@ -56,8 +75,18 @@ class Worker(QObject):
         thread_name = QThread.currentThread().objectName()
         thread_id = int(QThread.currentThreadId())  # cast to int() is necessary
         self.sig_msg.emit('Running worker #{} from thread "{}" (#{})'.format(self.__id, thread_name, thread_id))
-        self.smtp.sendmail(self.send_from, self.send_to, self.msg.as_string())
-
+        for i in range(self.listWidget.count()):
+            if self.__abort:
+                # note that "step" value will not necessarily be same for every thread
+                self.sig_msg.emit('Worker #{} aborting work at step {}'.format(self.__id, i))
+                break
+            if self.listWidget.item(i).checkState():
+                self.set_mail(self.frommail, self.fromname, [self.TABLE[i]['email']],
+                                                  self.TABLE[i]['subject'],
+                                                  self.TEMPLATE.format(**self.TABLE[i]),
+                              [self.TABLE[i]['attach1'], self.TABLE[i]['attach2']])
+                self.sig_step.emit(self.__id, 'point ' + str(i))
+                self.smtp.sendmail(self.send_from, self.send_to, self.msg.as_string())
         self.sig_done.emit(self.__id)
 
     def abort(self):
@@ -224,13 +253,6 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
             self.listWidget.itemClicked.connect(update_temp)
             self.listWidget_2.itemClicked.connect(self.open_attach)
 
-    def connect_to_server(self, server, login, password):
-        smtp = smtplib.SMTP(server)
-        smtp.starttls()
-        smtp.login(login, password)
-        smtp.ehlo()
-        return smtp
-
     def send_msg(self):
         # if self.CONFIG['gmail/yandex'] == 'yandex':
         #     mailserver = 'smtp.yandex.ru'
@@ -268,21 +290,13 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
             frommail = last_frommail
             fromname = last_fromname
             mailserver = last_mailserver
-            try:
-                smtp = self.connect_to_server(mailserver, login, passw)
-            except smtplib.SMTPAuthenticationError:
-                QMessageBox.warning(self.parent, 'Ошибка', 'Неправильный логин/пароль')
-                return
-            except:
-                QMessageBox.warning(self.parent, 'Ошибка', 'Не могу подключиться к серверу')
-                return
-            del passw
             self.statusbar.showMessage('starting send-thread')
             self.pushButton_2.setDisabled(True)
             self.pushButton_3.setEnabled(True)
             self.__workers_done = 0
             self.__threads = []
-            worker = Worker(1)
+            worker = Worker(1, self.TABLE, self.TEMPLATE, frommail, fromname, self.listWidget, mailserver, login, passw)
+            del passw
             thread = QThread()
             thread.setObjectName('thread_' + str(1))
             self.__threads.append((thread, worker))  # need to store worker too otherwise will be gc'd
@@ -299,14 +313,10 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
             # get read to start worker:
             # self.sig_start.connect(worker.work)  # needed due to PyCharm debugger bug (!); comment out next line
             thread.started.connect(worker.work)
+            thread.start()
+            thread.quit()
+            thread.wait()
             # this will emit 'started' and start thread's event loop
-            for i in range(self.listWidget.count()):
-                if self.listWidget.item(i).checkState():
-                    worker.set_mail_and_smtp_instance(frommail, fromname, [self.TABLE[i]['email']],
-                                                      self.TABLE[i]['subject'],
-                                                      self.TEMPLATE.format(**self.TABLE[i]),
-                                                      smtp, [self.TABLE[i]['attach1'], self.TABLE[i]['attach2']])
-                    thread.start()
-                    thread.quit()
-                    thread.wait()
+
+
             QMessageBox.information(self.parent, 'OK', 'Все письма успешно отправлены!')
