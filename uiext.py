@@ -24,22 +24,34 @@ class Worker(QObject):
         self.__id = id
         self.__abort = False
 
+    def set_mail_and_smtp_instance(self, send_from, sender_name, send_to, subject, text, smtp, files=None):
+        assert isinstance(send_to, list)
+        self.msg = MIMEMultipart()
+        self.msg['From'] = send_from
+        self.msg['To'] = COMMASPACE.join(send_to)
+        self.msg['Date'] = formatdate(localtime=True)
+        self.msg['Subject'] = subject
+        self.msg.attach(MIMEText(text, 'html'))
+        for f in files or []:
+            with open(f, "rb") as fil:
+                part = MIMEApplication(
+                    fil.read(),
+                    Name=basename(f)
+                )
+            # After the file is closed
+            part['Content-Disposition'] = 'attachment; filename="%s"' % basename(f)
+            self.msg.attach(part)
+        self.smtp = smtp
+        self.send_from = send_from
+        self.send_to = send_to
+        # smtp.sendmail(send_from, send_to, self.msg.as_string())
+
     @pyqtSlot()
     def work(self):
         thread_name = QThread.currentThread().objectName()
         thread_id = int(QThread.currentThreadId())  # cast to int() is necessary
         self.sig_msg.emit('Running worker #{} from thread "{}" (#{})'.format(self.__id, thread_name, thread_id))
-
-        for step in range(100):
-            time.sleep(1)
-            self.sig_step.emit(self.__id, 'step ' + str(step))
-
-            # check if we need to abort the loop; need to process events to receive signals;
-            # self.processEvents()  # this could cause change to self.__abort
-            if self.__abort:
-                # note that "step" value will not necessarily be same for every thread
-                self.sig_msg.emit('Worker #{} aborting work at step {}'.format(self.__id, step))
-                break
+        self.smtp.sendmail(self.send_from, self.send_to, self.msg.as_string())
 
         self.sig_done.emit(self.__id)
 
@@ -48,7 +60,7 @@ class Worker(QObject):
         self.__abort = True
 
 
-class Extended_GUI(ui2.Ui_MainWindow):
+class Extended_GUI(ui2.Ui_MainWindow, QObject):
     NUM_THREADS = 1
 
     sig_abort_workers = pyqtSignal()
@@ -90,6 +102,8 @@ class Extended_GUI(ui2.Ui_MainWindow):
         # even though threads have exited, there may still be messages on the main thread's
         # queue (messages that threads emitted before the abort):
         self.statusbar.showMessage('All threads exited')
+        self.pushButton_3.setDisabled(True)
+        self.pushButton_2.setEnabled(True)
 
     def rtv_template(self, template_name):
         try:
@@ -203,25 +217,6 @@ class Extended_GUI(ui2.Ui_MainWindow):
             self.listWidget.itemClicked.connect(update_temp)
             self.listWidget_2.itemClicked.connect(self.open_attach)
 
-    def send_mail(self, send_from, sender_name, send_to, subject, text, smtp, files=None):
-        assert isinstance(send_to, list)
-        msg = MIMEMultipart()
-        msg['From'] = send_from
-        msg['To'] = COMMASPACE.join(send_to)
-        msg['Date'] = formatdate(localtime=True)
-        msg['Subject'] = subject
-        msg.attach(MIMEText(text, 'html'))
-        for f in files or []:
-            with open(f, "rb") as fil:
-                part = MIMEApplication(
-                    fil.read(),
-                    Name=basename(f)
-                )
-            # After the file is closed
-            part['Content-Disposition'] = 'attachment; filename="%s"' % basename(f)
-            msg.attach(part)
-        smtp.sendmail(send_from, send_to, msg.as_string())
-
     def connect_to_server(self, server, login, password):
         smtp = smtplib.SMTP(server)
         smtp.starttls()
@@ -230,31 +225,7 @@ class Extended_GUI(ui2.Ui_MainWindow):
         return smtp
 
     def send_msg(self):
-        self.statusbar.showMessage('starting {} threads'.format(self.NUM_THREADS))
-        self.pushButton_2.setDisabled(True)
-        self.pushButton_3.setEnabled(True)
-        self.__workers_done = 0
-        self.__threads = []
         for idx in range(self.NUM_THREADS):
-            worker = Worker(idx)
-            thread = QThread()
-            thread.setObjectName('thread_' + str(idx))
-            self.__threads.append((thread, worker))  # need to store worker too otherwise will be gc'd
-            worker.moveToThread(thread)
-
-            # get progress messages from worker:
-            worker.sig_step.connect(self.on_worker_step)
-            worker.sig_done.connect(self.on_worker_done)
-            worker.sig_msg.connect(self.statusbar.showMessage)
-
-            # control worker:
-            self.sig_abort_workers.connect(worker.abort)
-
-            # get read to start worker:
-            # self.sig_start.connect(worker.work)  # needed due to PyCharm debugger bug (!); comment out next line
-            thread.started.connect(worker.work)
-
-            thread.start()  # this will emit 'started' and start thread's event loop
             if self.CONFIG['gmail/yandex'] == 'yandex':
                 mailserver = 'smtp.yandex.ru'
             elif self.CONFIG['gmail/yandex'] == 'gmail':
@@ -274,17 +245,37 @@ class Extended_GUI(ui2.Ui_MainWindow):
                     smtp = self.connect_to_server(mailserver, login, passw)
                 except smtplib.SMTPAuthenticationError:
                     QMessageBox.warning(self.parent, 'Ошибка', 'Неправильный логин/пароль')
-                    thread.quit()
-                    thread.wait()
                     return
                 except:
                     QMessageBox.warning(self.parent, 'Ошибка', 'Не могу подключиться к серверу')
-                    thread.quit()
-                    thread.wait()
                     return
                 del passw
+                self.statusbar.showMessage('starting {} threads'.format(self.NUM_THREADS))
+                self.pushButton_2.setDisabled(True)
+                self.pushButton_3.setEnabled(True)
+                self.__workers_done = 0
+                self.__threads = []
+                worker = Worker(idx)
+                thread = QThread()
+                thread.setObjectName('thread_' + str(idx))
+                self.__threads.append((thread, worker))  # need to store worker too otherwise will be gc'd
+                worker.moveToThread(thread)
+
+                # get progress messages from worker:
+                worker.sig_step.connect(self.on_worker_step)
+                worker.sig_done.connect(self.on_worker_done)
+                worker.sig_msg.connect(self.statusbar.showMessage)
+
+                # control worker:
+                self.sig_abort_workers.connect(worker.abort)
+
+                # get read to start worker:
+                # self.sig_start.connect(worker.work)  # needed due to PyCharm debugger bug (!); comment out next line
+                thread.started.connect(worker.work)
+                # this will emit 'started' and start thread's event loop
                 for i in range(self.listWidget.count()):
                     if self.listWidget.item(i).checkState():
-                        self.send_mail(frommail, fromname, [self.TABLE[i]['email']], self.TABLE[i]['subject'],
+                        worker.set_mail_and_smtp_instance(frommail, fromname, [self.TABLE[i]['email']], self.TABLE[i]['subject'],
                                        self.TEMPLATE.format(**self.TABLE[i]),
                                        smtp, [self.TABLE[i]['attach1'], self.TABLE[i]['attach2']])
+                        thread.start()
