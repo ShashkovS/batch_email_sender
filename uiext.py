@@ -11,8 +11,11 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import COMMASPACE, formatdate
 from PyQt5.Qt import *
-import time
-
+import keyring
+KEYRING_SERVICE = "batch_email_sender"
+LAST_EMAIL = "LAST_EMAIL"
+LAST_EMAIL_TYPE = "LAST_EMAIL_TYPE"
+LAST_SENDER = "LAST_SENDER"
 
 class Worker(QObject):
     sig_step = pyqtSignal(int, str)  # worker id, step description: emitted every step through work() loop
@@ -240,9 +243,20 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
             loginf = QDialog()
             diagui = LoginForm.Ui_Dialog()
             diagui.setupUi(loginf)
+
+            last_email = keyring.get_password(KEYRING_SERVICE, LAST_EMAIL)
+            if last_email:
+                diagui.lineEdit.setText(last_email)
             if loginf.exec_() == QDialog.Accepted:
                 login = diagui.lineEdit.text()
                 passw = diagui.lineEdit_2.text()
+                keyring.set_password(KEYRING_SERVICE, LAST_EMAIL, login)
+                domain = login[login.find('@')+1:].lower()
+                if domain in ('yandex.ru', 'ya.ru', 'narod.ru', 'yandex.com'):
+                    smtp_domain = "yandex"
+                elif domain in ('gmail.com', '179.ru'):
+                    smtp_domain = "gmail"
+                keyring.set_password(KEYRING_SERVICE, LAST_EMAIL_TYPE, smtp_domain)
                 try:
                     smtp = self.connect_to_server(mailserver, login, passw)
                 except smtplib.SMTPAuthenticationError:
