@@ -66,7 +66,6 @@ class Worker(QObject):
 
 
 class Extended_GUI(ui2.Ui_MainWindow, QObject):
-    NUM_THREADS = 1
 
     sig_abort_workers = pyqtSignal()
 
@@ -230,71 +229,71 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
         return smtp
 
     def send_msg(self):
-        for idx in range(self.NUM_THREADS):
-            if self.CONFIG['gmail/yandex'] == 'yandex':
-                mailserver = 'smtp.yandex.ru'
-            elif self.CONFIG['gmail/yandex'] == 'gmail':
-                mailserver = 'smtp.googlemail.com'
-            else:
-                raise NotImplementedError('Unknown mailserver.')  # Пока не включены в список
-            frommail = self.CONFIG['FromMail']
-            fromname = self.CONFIG['FromName']
+        if self.CONFIG['gmail/yandex'] == 'yandex':
+            mailserver = 'smtp.yandex.ru'
+        elif self.CONFIG['gmail/yandex'] == 'gmail':
+            mailserver = 'smtp.googlemail.com'
+        else:
+            raise NotImplementedError('Unknown mailserver.')  # Пока не включены в список
+        frommail = self.CONFIG['FromMail']
+        fromname = self.CONFIG['FromName']
 
-            loginf = QDialog()
-            diagui = LoginForm.Ui_Dialog()
-            diagui.setupUi(loginf)
+        loginf = QDialog()
+        diagui = LoginForm.Ui_Dialog()
+        diagui.setupUi(loginf)
 
-            last_email = keyring.get_password(KEYRING_SERVICE, LAST_EMAIL)
-            if last_email:
-                diagui.lineEdit.setText(last_email)
-            if loginf.exec_() == QDialog.Accepted:
-                login = diagui.lineEdit.text()
-                passw = diagui.lineEdit_2.text()
-                keyring.set_password(KEYRING_SERVICE, LAST_EMAIL, login)
-                domain = login[login.find('@')+1:].lower()
-                if domain in ('yandex.ru', 'ya.ru', 'narod.ru', 'yandex.com'):
-                    smtp_domain = "yandex"
-                elif domain in ('gmail.com', '179.ru'):
-                    smtp_domain = "gmail"
-                keyring.set_password(KEYRING_SERVICE, LAST_EMAIL_TYPE, smtp_domain)
-                try:
-                    smtp = self.connect_to_server(mailserver, login, passw)
-                except smtplib.SMTPAuthenticationError:
-                    QMessageBox.warning(self.parent, 'Ошибка', 'Неправильный логин/пароль')
-                    return
-                except:
-                    QMessageBox.warning(self.parent, 'Ошибка', 'Не могу подключиться к серверу')
-                    return
-                del passw
-                self.statusbar.showMessage('starting {} threads'.format(self.NUM_THREADS))
-                self.pushButton_2.setDisabled(True)
-                self.pushButton_3.setEnabled(True)
-                self.__workers_done = 0
-                self.__threads = []
-                worker = Worker(idx)
-                thread = QThread()
-                thread.setObjectName('thread_' + str(idx))
-                self.__threads.append((thread, worker))  # need to store worker too otherwise will be gc'd
-                worker.moveToThread(thread)
+        last_email = keyring.get_password(KEYRING_SERVICE, LAST_EMAIL)
+        if last_email:
+            diagui.lineEdit.setText(last_email)
+        if loginf.exec_() == QDialog.Accepted:
+            login = diagui.lineEdit.text()
+            passw = diagui.lineEdit_2.text()
+            keyring.set_password(KEYRING_SERVICE, LAST_EMAIL, login)
+            domain = login[login.find('@') + 1:].lower()
+            if domain in ('yandex.ru', 'ya.ru', 'narod.ru', 'yandex.com'):
+                smtp_domain = "yandex"
+            elif domain in ('gmail.com', '179.ru'):
+                smtp_domain = "gmail"
+            keyring.set_password(KEYRING_SERVICE, LAST_EMAIL_TYPE, smtp_domain)
+            try:
+                smtp = self.connect_to_server(mailserver, login, passw)
+            except smtplib.SMTPAuthenticationError:
+                QMessageBox.warning(self.parent, 'Ошибка', 'Неправильный логин/пароль')
+                return
+            except:
+                QMessageBox.warning(self.parent, 'Ошибка', 'Не могу подключиться к серверу')
+                return
+            del passw
+            self.statusbar.showMessage('starting {} threads'.format(self.NUM_THREADS))
+            self.pushButton_2.setDisabled(True)
+            self.pushButton_3.setEnabled(True)
+            self.__workers_done = 0
+            self.__threads = []
+            worker = Worker(1)
+            thread = QThread()
+            thread.setObjectName('thread_' + str(1))
+            self.__threads.append((thread, worker))  # need to store worker too otherwise will be gc'd
+            worker.moveToThread(thread)
 
-                # get progress messages from worker:
-                worker.sig_step.connect(self.on_worker_step)
-                worker.sig_done.connect(self.on_worker_done)
-                worker.sig_msg.connect(self.statusbar.showMessage)
+            # get progress messages from worker:
+            worker.sig_step.connect(self.on_worker_step)
+            worker.sig_done.connect(self.on_worker_done)
+            worker.sig_msg.connect(self.statusbar.showMessage)
 
-                # control worker:
-                self.sig_abort_workers.connect(worker.abort)
+            # control worker:
+            self.sig_abort_workers.connect(worker.abort)
 
-                # get read to start worker:
-                # self.sig_start.connect(worker.work)  # needed due to PyCharm debugger bug (!); comment out next line
-                thread.started.connect(worker.work)
-                # this will emit 'started' and start thread's event loop
-                for i in range(self.listWidget.count()):
-                    if self.listWidget.item(i).checkState():
-                        worker.set_mail_and_smtp_instance(frommail, fromname, [self.TABLE[i]['email']], self.TABLE[i]['subject'],
-                                       self.TEMPLATE.format(**self.TABLE[i]),
-                                       smtp, [self.TABLE[i]['attach1'], self.TABLE[i]['attach2']])
-                        thread.start()
-                        thread.quit()
-                        thread.wait()
-                QMessageBox.information(self.parent, 'OK', 'Все письма успешно отправлены!')
+            # get read to start worker:
+            # self.sig_start.connect(worker.work)  # needed due to PyCharm debugger bug (!); comment out next line
+            thread.started.connect(worker.work)
+            # this will emit 'started' and start thread's event loop
+            for i in range(self.listWidget.count()):
+                if self.listWidget.item(i).checkState():
+                    worker.set_mail_and_smtp_instance(frommail, fromname, [self.TABLE[i]['email']],
+                                                      self.TABLE[i]['subject'],
+                                                      self.TEMPLATE.format(**self.TABLE[i]),
+                                                      smtp, [self.TABLE[i]['attach1'], self.TABLE[i]['attach2']])
+                    thread.start()
+                    thread.quit()
+                    thread.wait()
+            QMessageBox.information(self.parent, 'OK', 'Все письма успешно отправлены!')
