@@ -297,3 +297,4 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
                         thread.start()
                         thread.quit()
                         thread.wait()
+                QMessageBox.information(self.parent, 'OK', 'Все письма успешно отправлены!')
