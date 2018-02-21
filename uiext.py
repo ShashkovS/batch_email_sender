@@ -33,6 +33,8 @@ class Worker(QObject):
         self.msg['Subject'] = subject
         self.msg.attach(MIMEText(text, 'html'))
         for f in files or []:
+            if not f:
+                continue
             with open(f, "rb") as fil:
                 part = MIMEApplication(
                     fil.read(),

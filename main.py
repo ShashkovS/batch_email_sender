@@ -7,7 +7,6 @@ from PyQt5.Qt import *
 def excepthook(excType, excValue, tracebackobj):
     traceback.print_tb(tracebackobj, excType, excValue)
 
-
 sys.excepthook = excepthook
 
 app = QApplication(sys.argv)
