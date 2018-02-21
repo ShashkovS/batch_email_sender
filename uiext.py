@@ -90,7 +90,7 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
     def on_worker_done(self, worker_id):
         self.statusbar.showMessage('worker #{} done'.format(worker_id))
         self.__workers_done += 1
-        if self.__workers_done == self.NUM_THREADS:
+        if self.__workers_done == 1:
             # self.log.append('No more workers active')
             self.pushButton_2.setEnabled(True)
             self.pushButton_3.setDisabled(True)
@@ -244,20 +244,20 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
 
         last_frommail = keyring.get_password(KEYRING_SERVICE, LAST_FROMMAIL)
         if last_frommail:
-            diagui.lineEdit.setText(last_frommail)
+            diagui.line_email.setText(last_frommail)
         last_fromname = keyring.get_password(KEYRING_SERVICE, LAST_FROMNAME)
         if last_fromname:
-            diagui.lineEdit_3.setText(last_fromname)
+            diagui.line_sender.setText(last_fromname)
         last_mailserver = keyring.get_password(KEYRING_SERVICE, LAST_MAILSERVER)
         if last_mailserver:
-            diagui.lineEdit_4.setText(last_mailserver)
+            diagui.line_smtpserver.setText(last_mailserver)
         else:
-            diagui.lineEdit_4.setText('smtp.googlemail.com')
+            diagui.line_smtpserver.setText('smtp.googlemail.com')
         if loginf.exec_() == QDialog.Accepted:
-            last_frommail = diagui.lineEdit.text()
-            passw = diagui.lineEdit_2.text()
-            last_fromname = diagui.lineEdit_3.text()
-            last_mailserver = diagui.lineEdit_4.text()
+            last_frommail = diagui.line_email.text()
+            passw = diagui.line_password.text()
+            last_fromname = diagui.line_sender.text()
+            last_mailserver = diagui.line_smtpserver.text()
             keyring.set_password(KEYRING_SERVICE, LAST_FROMMAIL, last_frommail)
             keyring.set_password(KEYRING_SERVICE, LAST_FROMNAME, last_fromname)
             keyring.set_password(KEYRING_SERVICE, LAST_MAILSERVER, last_mailserver)
@@ -274,7 +274,7 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
                 QMessageBox.warning(self.parent, 'Ошибка', 'Не могу подключиться к серверу')
                 return
             del passw
-            self.statusbar.showMessage('starting {} threads'.format(self.NUM_THREADS))
+            self.statusbar.showMessage('starting send-thread')
             self.pushButton_2.setDisabled(True)
             self.pushButton_3.setEnabled(True)
             self.__workers_done = 0
