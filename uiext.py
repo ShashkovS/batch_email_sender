@@ -13,9 +13,9 @@ from email.utils import COMMASPACE, formatdate
 from PyQt5.Qt import *
 import keyring
 KEYRING_SERVICE = "batch_email_sender"
-LAST_EMAIL = "LAST_EMAIL"
-LAST_EMAIL_TYPE = "LAST_EMAIL_TYPE"
-LAST_SENDER = "LAST_SENDER"
+LAST_FROMMAIL = "pSxx7tJyvgz2tk"
+LAST_MAILSERVER = "KjdsEYxeRaCk77"
+LAST_FROMNAME = "FY8Btthta4n3ZF"
 
 class Worker(QObject):
     sig_step = pyqtSignal(int, str)  # worker id, step description: emitted every step through work() loop
@@ -229,32 +229,42 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
         return smtp
 
     def send_msg(self):
-        if self.CONFIG['gmail/yandex'] == 'yandex':
-            mailserver = 'smtp.yandex.ru'
-        elif self.CONFIG['gmail/yandex'] == 'gmail':
-            mailserver = 'smtp.googlemail.com'
-        else:
-            raise NotImplementedError('Unknown mailserver.')  # Пока не включены в список
-        frommail = self.CONFIG['FromMail']
-        fromname = self.CONFIG['FromName']
+        # if self.CONFIG['gmail/yandex'] == 'yandex':
+        #     mailserver = 'smtp.yandex.ru'
+        # elif self.CONFIG['gmail/yandex'] == 'gmail':
+        #     mailserver = 'smtp.googlemail.com'
+        # else:
+        #     raise NotImplementedError('Unknown mailserver.')  # Пока не включены в список
+        # frommail = self.CONFIG['FromMail']
+        # fromname = self.CONFIG['FromName']
 
         loginf = QDialog()
         diagui = LoginForm.Ui_Dialog()
         diagui.setupUi(loginf)
 
-        last_email = keyring.get_password(KEYRING_SERVICE, LAST_EMAIL)
-        if last_email:
-            diagui.lineEdit.setText(last_email)
+        last_frommail = keyring.get_password(KEYRING_SERVICE, LAST_FROMMAIL)
+        if last_frommail:
+            diagui.lineEdit.setText(last_frommail)
+        last_fromname = keyring.get_password(KEYRING_SERVICE, LAST_FROMNAME)
+        if last_fromname:
+            diagui.lineEdit_3.setText(last_fromname)
+        last_mailserver = keyring.get_password(KEYRING_SERVICE, LAST_MAILSERVER)
+        if last_mailserver:
+            diagui.lineEdit_4.setText(last_mailserver)
+        else:
+            diagui.lineEdit_4.setText('smtp.googlemail.com')
         if loginf.exec_() == QDialog.Accepted:
-            login = diagui.lineEdit.text()
+            last_frommail = diagui.lineEdit.text()
             passw = diagui.lineEdit_2.text()
-            keyring.set_password(KEYRING_SERVICE, LAST_EMAIL, login)
-            domain = login[login.find('@') + 1:].lower()
-            if domain in ('yandex.ru', 'ya.ru', 'narod.ru', 'yandex.com'):
-                smtp_domain = "yandex"
-            elif domain in ('gmail.com', '179.ru'):
-                smtp_domain = "gmail"
-            keyring.set_password(KEYRING_SERVICE, LAST_EMAIL_TYPE, smtp_domain)
+            last_fromname = diagui.lineEdit_3.text()
+            last_mailserver = diagui.lineEdit_4.text()
+            keyring.set_password(KEYRING_SERVICE, LAST_FROMMAIL, last_frommail)
+            keyring.set_password(KEYRING_SERVICE, LAST_FROMNAME, last_fromname)
+            keyring.set_password(KEYRING_SERVICE, LAST_MAILSERVER, last_mailserver)
+            login = last_frommail
+            frommail = last_frommail
+            fromname = last_fromname
+            mailserver = last_mailserver
             try:
                 smtp = self.connect_to_server(mailserver, login, passw)
             except smtplib.SMTPAuthenticationError:
