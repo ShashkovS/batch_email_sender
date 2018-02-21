@@ -281,3 +281,5 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
                                        self.TEMPLATE.format(**self.TABLE[i]),
                                        smtp, [self.TABLE[i]['attach1'], self.TABLE[i]['attach2']])
                         thread.start()
+                        thread.quit()
+                        thread.wait()
