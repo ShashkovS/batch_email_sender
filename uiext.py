@@ -82,11 +82,13 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
         self.__workers_done = None
         self.__threads = None
 
+    @pyqtSlot(int, str)
     def on_worker_step(self, worker_id: int, data: str):
         # self.log.append('Worker #{}: {}'.format(worker_id, data))
         # self.progress.append('{}: {}'.format(worker_id, data))
         self.statusbar.showMessage('Worker #{}: {}'.format(worker_id, data))
 
+    @pyqtSlot(int)
     def on_worker_done(self, worker_id):
         self.statusbar.showMessage('worker #{} done'.format(worker_id))
         self.__workers_done += 1
@@ -96,6 +98,7 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
             self.pushButton_3.setDisabled(True)
             # self.__threads = None
 
+    @pyqtSlot()
     def abort_workers(self):
         self.sig_abort_workers.emit()
         self.statusbar.showMessage('Asking each worker to abort')
