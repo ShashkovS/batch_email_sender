@@ -4,6 +4,7 @@ import os
 ONE_PLUS_ONE_FOR_HEADER = 2
 OK_COLUMN = 1
 OKOK = 'ok'
+ORIGINAL_ROW_NUM = 'row_num_WcCRve89'
 
 def rtv_table(xls_name):
     try:
@@ -26,13 +27,14 @@ def rtv_table(xls_name):
     rows_list = []
     for j in range(2, nrows + 1):
         cur = columns.copy()
+        cur[ORIGINAL_ROW_NUM] = j
         for key, col in columns.items():
             cur[key] = str(xl_sheet.cell(row=j, column=col).value).replace('None', '')
         rows_list.append(cur)
     return rows_list, bold_columns
 
 
-def set_ok(xls_name, row_num_ind):
+def set_ok(xls_name, row_num_real):
     while True:
         try:
             xl_workbook = openpyxl.load_workbook(filename=xls_name, read_only=False, data_only=False)
@@ -46,7 +48,7 @@ def set_ok(xls_name, row_num_ind):
             # continue
     xl_sheet_names = xl_workbook.get_sheet_names()
     xl_sheet = xl_workbook.get_sheet_by_name(xl_sheet_names[0])
-    xl_sheet.cell(row=row_num_ind+ONE_PLUS_ONE_FOR_HEADER, column=OK_COLUMN).value = OKOK
+    xl_sheet.cell(row=row_num_real, column=OK_COLUMN).value = OKOK
     xl_workbook.save(filename=xls_name)
 
 

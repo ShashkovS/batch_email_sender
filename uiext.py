@@ -24,7 +24,7 @@ class Worker(QObject):
     sig_done = pyqtSignal(int)  # worker id: emitted at end of work()
     sig_msg = pyqtSignal(str)  # message to be shown to user
 
-    def __init__(self, id: int, table, template, frommail, fromname, listwidget, server, login, password):
+    def __init__(self, id: int, table, template, xls_name, frommail, fromname, listwidget, server, login, password):
         super().__init__()
         self.__id = id
         self.__abort = False
@@ -33,6 +33,7 @@ class Worker(QObject):
         self.frommail = frommail
         self.fromname = fromname
         self.listWidget = listwidget
+        self.xls_name = xls_name
         try:
             self.smtp = self.connect_to_server(server, login, password)
         except smtplib.SMTPAuthenticationError:
@@ -89,6 +90,7 @@ class Worker(QObject):
                               [self.TABLE[i]['attach1'], self.TABLE[i]['attach2']])
                 self.sig_step.emit(self.__id, 'point ' + str(i))
                 self.smtp.sendmail(self.send_from, self.send_to, self.msg.as_string())
+                files_parsers.set_ok(self.xls_name, self.TABLE[i][files_parsers.ORIGINAL_ROW_NUM])  #
         self.sig_done.emit(self.__id)
 
     def abort(self):
@@ -143,67 +145,6 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
         self.pushButton_3.setDisabled(True)
         self.pushButton_2.setEnabled(True)
 
-    def rtv_template(self, template_name):
-        try:
-            with open(template_name, encoding='utf-8') as f:
-                template = f.read()
-        except FileNotFoundError:
-            os.chdir('..')
-            try:
-                with open(template_name, encoding='utf-8') as f:
-                    template = f.read()
-            except FileNotFoundError:
-                print('Файл с шаблоном email_template.txt не найден')
-                return False
-        # ask(template, 'Это правильный шаблон?')
-        # template = template.replace('\n', ' ')
-        return template
-
-    def rtv_settings(self, email_settings):
-        try:
-            with open(email_settings, encoding='utf-8') as f:
-                settings_rows = f.readlines()
-        except FileNotFoundError:
-            print('Файл с настройками email_settings.txt не найден')
-            return False
-
-        settings = {'FromMail': None, 'gmail/yandex': None, 'FromName': None, 'email_template': None,
-                    'email_list': None}
-        for key in settings:
-            for row in settings_rows:
-                if key in row:
-                    settings[key] = row[row.find(':') + 1:].strip()
-        for key, val in settings.items():
-            if not val:
-                print(f'В файле {email_settings} не заполнен параметр', key)
-                return False
-        if settings['gmail/yandex'] not in ['gmail', 'yandex']:
-            print('В качестве почты (настройка gmail/yandex) поддерживается пока только yandex и gmail')
-            return False
-        # ask(settings, 'Настройки для отправки в норме?')
-        return settings
-
-    def rtv_table(self, xls_name):
-        try:
-            xl_workbook = xlrd.open_workbook(xls_name)
-        except FileNotFoundError:
-            print(f'Файл {xls_name} не найден')
-            return False
-        xl_sheet = xl_workbook.sheet_by_index(0)
-        columns = {}
-        for i in range(xl_sheet.ncols):
-            title = str(xl_sheet.cell(0, i).value)
-            if title:
-                columns[title] = i
-        result = []
-        for j in range(1, xl_sheet.nrows):
-            cur = columns.copy()
-            for key, col in columns.items():
-                cur[key] = str(xl_sheet.cell(j, col).value)
-            result.append(cur)
-        # ask('\n'.join(map(str, result)), 'Данные для отправки похожи на правду?')
-        return result
-
     def open_attach(self, item):
         for i in range(self.listWidget_2.count()):
             if self.listWidget_2.item(i) == item and self.listWidget_2.item(i).text():
@@ -244,7 +185,9 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
             return
         rows_list, bold_columns, template = files_parsers.rtv_table_and_template(xls_name, template_name)
         # Удаляем из списка всё, что уже ОК, и у чего не заполнен email
-        rows_list = [row for row in rows_list if row[files_parsers.OKOK] == files_parsers.OKOK and '@' in row['email']]
+        rows_list = [row for row in rows_list if row[files_parsers.OKOK] != files_parsers.OKOK and '@' in row['email']]
+        self.xls_name =xls_name
+        self.template_name = template_name
         self.TEMPLATE = template
         self.TABLE = rows_list
         if template and rows_list:
@@ -300,7 +243,7 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
             self.pushButton_3.setEnabled(True)
             self.__workers_done = 0
             self.__threads = []
-            worker = Worker(1, self.TABLE, self.TEMPLATE, frommail, fromname, self.listWidget, mailserver, login, passw)
+            worker = Worker(1, self.TABLE, self.TEMPLATE, self.xls_name, frommail, fromname, self.listWidget, mailserver, login, passw)
             del passw
             thread = QThread()
             thread.setObjectName('thread_' + str(1))
