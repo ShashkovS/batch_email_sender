@@ -5,6 +5,8 @@ import xlrd
 import smtplib
 import subprocess
 import ui2
+import files_parsers
+import alerts
 from os.path import basename
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
@@ -202,15 +204,6 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
         # ask('\n'.join(map(str, result)), 'Данные для отправки похожи на правду?')
         return result
 
-    def check_template_vs_table(self, template, table):
-        if table:
-            try:
-                dummy = (template + '{email}{subject}').format(**table[0])
-                return True
-            except KeyError as e:
-                print('Поля', e, 'из шаблона нет в таблице')
-                return False
-
     def open_attach(self, item):
         for i in range(self.listWidget_2.count()):
             if self.listWidget_2.item(i) == item and self.listWidget_2.item(i).text():
@@ -222,32 +215,44 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
                     subprocess.call(('xdg-open', item.text()))
 
     def open_config(self):
-
         def update_temp(item):
+            nonlocal rows_list
             for i in range(self.listWidget.count()):
                 if self.listWidget.item(i) == item:
-                    self.textBrowser.setText(template.format(**table[i]))
+                    self.textBrowser.setText(template.format(**rows_list[i]))
                     self.listWidget_2.clear()
-                    self.listWidget_2.addItems([table[i]['attach{}'.format(j)] for j in range(1, 3)])
+                    self.listWidget_2.addItems([rows_list[i]['attach{}'.format(j)] for j in range(1, 3)])
                     break
 
         self.listWidget.clear()
         self.listWidget_2.clear()
         options = QFileDialog.Options()
-        filename, _ = QFileDialog.getOpenFileName(caption='Выберите конфиг', directory='', filter='All files(*)',
-                                                  options=options)
-
-        self.CONFIG = settings = self.rtv_settings(filename)
-        self.TEMPLATE = template = self.rtv_template(settings['email_template'])
-        table = self.rtv_table(settings['email_list'])
-        self.TABLE = table.copy()
-        res = self.check_template_vs_table(template, table)
-        if res and template and table:
-            self.textBrowser.setText(template.format(**table[0]))
-            print([self.TABLE[2]['attach' + str(i)] for i in range(1, 3)])
+        filename, _ = QFileDialog.getOpenFileName(caption='Выберите список или шаблон', directory='',
+                                                  options=options,
+                                                  filter="Список или шаблон (*list.xlsx *text.html);;Список (*list.xlsx);;Шаблон (*text.html);;All Files (*)")
+        # filename — это либо имя excel'ника, либо имя html-шаблона. По имени определяем, что это, и определяем
+        # оставшиеся имена
+        filename = filename.lower()
+        if filename.endswith('list.xlsx'):
+            xls_name = filename
+            template_name = filename.replace('list.xlsx', 'text.html')
+        elif filename.endswith('text.html'):
+            xls_name = filename.replace('text.html', 'list.xlsx')
+            template_name = filename
+        else:
+            alerts.alert(f'Нужно выбрать файл со списком ***list.xlsx или файл с шаблоном письма ***text.html')
+            return
+        rows_list, bold_columns, template = files_parsers.rtv_table_and_template(xls_name, template_name)
+        # Удаляем из списка всё, что уже ОК, и у чего не заполнен email
+        rows_list = [row for row in rows_list if row[files_parsers.OKOK] == files_parsers.OKOK and '@' in row['email']]
+        self.TEMPLATE = template
+        self.TABLE = rows_list
+        if template and rows_list:
+            self.textBrowser.setText(template.format(**rows_list[0]))
+            print([self.TABLE[0]['attach' + str(i)] for i in range(1, 3)])
             self.listWidget_2.addItems([self.TABLE[0]['attach' + str(i)] for i in range(1, 3)])
-            for i in table:
-                item = QListWidgetItem(' '.join([i['ID'], i['Фамилия'], i['Имя'], i['Школа']]))
+            for i in rows_list:
+                item = QListWidgetItem(' '.join([i[col] for col in bold_columns]))
                 self.listWidget.addItem(item)
                 item.setCheckState(Qt.Checked)
             self.listWidget.itemClicked.connect(update_temp)
@@ -320,3 +325,6 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
 
 
             QMessageBox.information(self.parent, 'OK', 'Все письма успешно отправлены!')
+
+if __name__ == '__main__':
+    print('Не-не-не, нужно запускать main.py')

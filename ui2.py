@@ -70,7 +70,7 @@ class Ui_MainWindow(object):
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
         MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
-        self.pushButton_2.setText(_translate("MainWindow", "отправить письма всем выделенным людям"))
+        self.pushButton_2.setText(_translate("MainWindow", "Отправить письма всем выделенным людям"))
         self.pushButton_3.setText(_translate("MainWindow", "Отмена"))
-        self.pushButton.setText(_translate("MainWindow", "открыть конфиг"))
+        self.pushButton.setText(_translate("MainWindow", "Открыть *list.xlsx или ***text.html"))
 
