@@ -1,7 +1,7 @@
 import sys
-import uiext as GUI
+import gui_logic as GUI
 import traceback
-from PyQt5.Qt import *
+from PyQt5.Qt import QApplication, QMainWindow
 
 
 def excepthook(excType, excValue, tracebackobj):
@@ -9,8 +9,9 @@ def excepthook(excType, excValue, tracebackobj):
 
 sys.excepthook = excepthook
 
-app = QApplication(sys.argv)
-w = QMainWindow()
-ui = GUI.Extended_GUI(w)
-w.show()
-sys.exit(app.exec_())
+
+batch_sender_app = QApplication(sys.argv)
+main_window = QMainWindow()
+ui = GUI.Extended_GUI(main_window)
+main_window.show()
+sys.exit(batch_sender_app.exec_())

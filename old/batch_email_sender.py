@@ -199,7 +199,7 @@ print('Коннектимся...')
 gmail = 1
 # gmail = connect_to_smtp(settings['FromMail'], settings['gmail/yandex'])
 sent = 0
-with open('log.txt', 'w', encoding='utf-8') as f:
+with open('log.txt', 'main_window', encoding='utf-8') as f:
     for data_row in table:
         if not data_row['email'].strip():
             continue

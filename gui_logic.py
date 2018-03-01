@@ -1,12 +1,10 @@
 import sys
 import os
-import log2 as LoginForm
-import xlrd
 import smtplib
 import subprocess
-import ui2
 import files_parsers
-import alerts
+import ui_email_and_passw as LoginForm
+import ui_main_window
 from os.path import basename
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
@@ -98,7 +96,7 @@ class Worker(QObject):
         self.__abort = True
 
 
-class Extended_GUI(ui2.Ui_MainWindow, QObject):
+class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
 
     sig_abort_workers = pyqtSignal()
 
@@ -181,7 +179,8 @@ class Extended_GUI(ui2.Ui_MainWindow, QObject):
             xls_name = filename.replace('text.html', 'list.xlsx')
             template_name = filename
         else:
-            alerts.alert(f'Нужно выбрать файл со списком ***list.xlsx или файл с шаблоном письма ***text.html')
+            QMessageBox.information(self.parent, 'Понял, нужен список или шаблон',
+                                    f'Нужно выбрать файл со списком ***list.xlsx или файл с шаблоном письма ***text.html')
             return
         rows_list, bold_columns, template = files_parsers.rtv_table_and_template(xls_name, template_name)
         # Удаляем из списка всё, что уже ОК, и у чего не заполнен email

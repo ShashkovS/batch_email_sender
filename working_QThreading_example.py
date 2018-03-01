@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import QApplication, QPushButton, QTextEdit, QVBoxLayout, Q
 
 
 def trap_exc_during_debug(*args):
-    # when app raises uncaught exception, print info
+    # when batch_sender_app raises uncaught exception, print info
     print(args)
 
 
