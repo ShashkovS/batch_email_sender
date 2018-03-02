@@ -1,6 +1,0 @@
-﻿FromMail: abw00001@ya.ru
-gmail/yandex: yandex
-FromName: Абишев Виктор
-email_template: res_next_email_template.html
-email_list: res_next_email_list.xlsx
-

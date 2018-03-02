@@ -15,10 +15,6 @@ sys.excepthook = trap_exc_during_debug
 
 
 class Worker(QObject):
-    """
-    Must derive from QObject in order to emit signals, connect slots to other signals, and operate in a QThread.
-    """
-
     sig_step = pyqtSignal(int, str)  # worker id, step description: emitted every step through work() loop
     sig_done = pyqtSignal(int)  # worker id: emitted at end of work()
     sig_msg = pyqtSignal(str)  # message to be shown to user
@@ -59,7 +55,7 @@ class Worker(QObject):
 
 
 class MyWidget(QWidget):
-    NUM_THREADS = 5
+    NUM_THREADS = 2
 
     # sig_start = pyqtSignal()  # needed only due to PyCharm debugger bug (!)
     sig_abort_workers = pyqtSignal()

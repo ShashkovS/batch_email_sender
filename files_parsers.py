@@ -1,9 +1,11 @@
 import openpyxl
 import os
+import re
 ONE_PLUS_ONE_FOR_HEADER = 2
 OK_COLUMN = 1
 OKOK = 'ok'
 ORIGINAL_ROW_NUM = 'row_num_WcCRve89'
+EMAIL_REGEX = r"\s*([a-zA-Z0-9'_][a-zA-Z0-9'._+-]{,63}@[a-zA-Z0-9.-]{,254}[a-zA-Z0-9])\s*"
 
 def rtv_table(xls_name):
     try:
@@ -60,7 +62,6 @@ def rtv_template(template_name):
 def rtv_table_and_template(xls_name, template_name):
     rows_list, bold_columns = rtv_table(xls_name)
     template = rtv_template(template_name)
-    NOTHING = None, None, None
     if not rows_list:
         raise Exception(f'В файле {xls_name} не обнаружены строки с данными')
     first_data_row = rows_list[0]
@@ -75,14 +76,20 @@ def rtv_table_and_template(xls_name, template_name):
         raise Exception(f'В таблице {xls_name} должен быть столбец {e!s}, так как он упоминается в шаблоне {template_name}')
     # Теперь проверяем существование всех вложений
     attach_cols = [key for key in first_data_row if key.startswith('attach')]
-    if attach_cols:
-        for rn, row in enumerate(rows_list):
-            if '@' not in row['email'] or row['ok'].lower() == OKOK.lower():
+    for rn, row in enumerate(rows_list):
+        if attach_cols:
+            email = row['email']
+            email = re.findall(EMAIL_REGEX, email)
+            row['email'] = email
+            if not row['email']:
                 continue
             for attach_key in attach_cols:
                 attach_name = row[attach_key]
                 if attach_name and not os.path.isfile(attach_name):
                     raise Exception(f'В таблице {xls_name} в строчке {rn+ONE_PLUS_ONE_FOR_HEADER} в столбце {attach_key} указано вложение "{attach_name}". Этот файл не найден')
+            row['attach_list'] = [row[attach_key] for attach_key in attach_cols]
+        else:
+            row['attach_list'] = []
     # Проверили, что всё работает. Проверили, что вложения существуют
     return rows_list, bold_columns, template
 
