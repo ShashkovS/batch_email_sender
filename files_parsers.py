@@ -30,6 +30,7 @@ def rtv_table(xls_name):
         cur[ORIGINAL_ROW_NUM] = rn
         for col_name, cell in zip(columns, row):
             cur[col_name] = str(cell.value).replace('None', '')
+        cur['email'] = re.findall(EMAIL_REGEX, cur['email'])
         rows_list.append(cur)
     return rows_list, bold_columns
 
@@ -78,9 +79,6 @@ def rtv_table_and_template(xls_name, template_name):
     attach_cols = [key for key in first_data_row if key.startswith('attach')]
     for rn, row in enumerate(rows_list):
         if attach_cols:
-            email = row['email']
-            email = re.findall(EMAIL_REGEX, email)
-            row['email'] = email
             if not row['email']:
                 continue
             for attach_key in attach_cols:
