@@ -1,3 +1,19 @@
+import pip
+try: import keyring
+except ModuleNotFoundError:
+    pip.main(['install', 'keyring'])
+    import keyring
+
+try: import openpyxl
+except ModuleNotFoundError:
+    pip.main(['install', 'openpyxl'])
+    import openpyxl
+
+try: import PyQt5
+except ModuleNotFoundError:
+    pip.main(['install', 'PyQt5'])
+    import PyQt5
+
 import sys
 import traceback
 import os
@@ -7,7 +23,7 @@ import keyring
 from PyQt5.Qt import *
 
 import files_parsers
-import ui_email_and_passw as LoginForm
+import ui_email_and_passw
 import ui_main_window
 import email_stuff
 
@@ -210,6 +226,7 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
         filename, _ = QFileDialog.getOpenFileName(caption='Выберите список или шаблон', directory='',
                                                   options=options,
                                                   filter="Список или шаблон (*list.xlsx *text.html);;Список (*list.xlsx);;Шаблон (*text.html);;All Files (*)")
+        os.chdir(os.path.dirname(filename))
         try:
             self.read_list_and_template(filename)
         except Exception as e:
@@ -218,7 +235,7 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
 
     def ask_login_and_create_connection(self):
         loginf = QDialog()
-        diagui = LoginForm.Ui_Dialog()
+        diagui = ui_email_and_passw.Ui_Dialog()
         diagui.setupUi(loginf)
 
         last_frommail = keyring.get_password(KEYRING_SERVICE, LAST_FROMMAIL)

@@ -12,24 +12,24 @@ def rtv_table(xls_name):
         xl_workbook = openpyxl.load_workbook(filename=xls_name, read_only=True, data_only=True)
     except FileNotFoundError:
         raise Exception(f'Файл {xls_name} не найден')
-    xl_sheet_names = xl_workbook.get_sheet_names()
-    xl_sheet = xl_workbook.get_sheet_by_name(xl_sheet_names[0])
-    ncols = xl_sheet.max_column
-    nrows = xl_sheet.max_row
-    columns = {}
+    xl_sheet_names = xl_workbook.sheetnames
+    xl_sheet = xl_workbook[xl_sheet_names[0]]
+    columns = []
     bold_columns = []
-    for i in range(1, ncols + 1):
-        title = str(xl_sheet.cell(row=1, column=i).value)
+    row_iter = iter(xl_sheet.rows)
+    for cell in next(row_iter):
+        title = str(cell.value)
         if title:
-            columns[title] = i
-            if xl_sheet.cell(row=1, column=i).font.bold:
+            columns.append(title) # cell.column
+            if cell.font.bold:
                 bold_columns.append(title)
+    row_dict = {title: '' for title in columns}
     rows_list = []
-    for j in range(2, nrows + 1):
-        cur = columns.copy()
-        cur[ORIGINAL_ROW_NUM] = j
-        for key, col in columns.items():
-            cur[key] = str(xl_sheet.cell(row=j, column=col).value).replace('None', '')
+    for rn, row in enumerate(row_iter, start=2):
+        cur = row_dict.copy()
+        cur[ORIGINAL_ROW_NUM] = rn
+        for col_name, cell in zip(columns, row):
+            cur[col_name] = str(cell.value).replace('None', '')
         rows_list.append(cur)
     return rows_list, bold_columns
 
