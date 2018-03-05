@@ -11,7 +11,7 @@ def rtv_table(xls_name):
     try:
         xl_workbook = openpyxl.load_workbook(filename=xls_name, read_only=True, data_only=True)
     except FileNotFoundError:
-        raise Exception(f'Файл {xls_name} не найден')
+        raise Exception('Файл ' + xls_name + ' не найден')
     xl_sheet_names = xl_workbook.sheetnames
     xl_sheet = xl_workbook[xl_sheet_names[0]]
     columns = []
@@ -41,9 +41,9 @@ def set_ok(xls_name, row_num_real):
             xl_workbook = openpyxl.load_workbook(filename=xls_name, read_only=False, data_only=False)
             break
         except FileNotFoundError:
-            raise Exception(f'Файл {xls_name} не найден')
+            raise Exception('Файл ' + xls_name + ' не найден')
         except PermissionError:
-            raise Exception(f'Файл {xls_name} заблокирован. Сохраните и закойте его. В него будут вноситься отметки об успешности отправки')
+            raise Exception('Файл ' + xls_name + ' заблокирован. Сохраните и закойте его. В него будут вноситься отметки об успешности отправки')
             # continue
     xl_sheet_names = xl_workbook.get_sheet_names()
     xl_sheet = xl_workbook.get_sheet_by_name(xl_sheet_names[0])
@@ -56,7 +56,7 @@ def rtv_template(template_name):
         with open(template_name, encoding='utf-8') as f:
             template = f.read()
     except FileNotFoundError:
-        raise Exception(f'Файл с шаблоном {template_name} не найден')
+        raise Exception('Файл с шаблоном ' + template_name + ' не найден')
     return template
 
 
@@ -64,17 +64,18 @@ def rtv_table_and_template(xls_name, template_name):
     rows_list, bold_columns = rtv_table(xls_name)
     template = rtv_template(template_name)
     if not rows_list:
-        raise Exception(f'В файле {xls_name} не обнаружены строки с данными')
+        raise Exception('В файле ' + xls_name + ' не обнаружены строки с данными')
     first_data_row = rows_list[0]
     # Проверяем обязательные столбцы: ok, email, subject
     for col_name in ['ok', 'email', 'subject']:
         if col_name not in first_data_row:
-            raise Exception(f'В таблице {xls_name} обязательно должен быть столбец {col_name}')
+            raise Exception('В таблице ' + xls_name + ' обязательно должен быть столбец ' + col_name)
     # Проверяем, что есть всё, что указано в шаблоне
     try:
         template.format(**first_data_row)
     except KeyError as e:
-        raise Exception(f'В таблице {xls_name} должен быть столбец {e!s}, так как он упоминается в шаблоне {template_name}')
+        raise Exception('В таблице ' + xls_name + ' должен быть столбец ' + str(e)
+                        + ', так как он упоминается в шаблоне ' + template_name)
     # Теперь проверяем существование всех вложений
     attach_cols = [key for key in first_data_row if key.startswith('attach')]
     for rn, row in enumerate(rows_list):
@@ -84,7 +85,9 @@ def rtv_table_and_template(xls_name, template_name):
             for attach_key in attach_cols:
                 attach_name = row[attach_key]
                 if attach_name and not os.path.isfile(attach_name):
-                    raise Exception(f'В таблице {xls_name} в строчке {rn+ONE_PLUS_ONE_FOR_HEADER} в столбце {attach_key} указано вложение "{attach_name}". Этот файл не найден')
+                    raise Exception('В таблице ' + xls_name + ' в строчке ' +
+                                    str(rn+ONE_PLUS_ONE_FOR_HEADER) + ' в столбце ' + attach_key
+                                    + ' указано вложение "' + attach_name + '". Этот файл не найден')
             row['attach_list'] = [row[attach_key] for attach_key in attach_cols]
         else:
             row['attach_list'] = []

@@ -44,7 +44,7 @@ class EmailEnvelope:
         except smtplib.SMTPServerDisconnected as e:
             status = -1
         if status != 250:
-            raise Exception(f'Не удалось подключиться для отправки почты с адреса {self.login}')
+            raise Exception('Не удалось подключиться для отправки почты с адреса ' + self.login)
 
     def add_mail_to_queue(self, recipients: List[str], subject, html, files=None, xls_id=None, qt_id=None):
         msg = MIMEMultipart()
