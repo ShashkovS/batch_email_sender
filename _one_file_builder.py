@@ -14,6 +14,9 @@ module_list = [
 
 
 file_texts = [open(filename + '.py', 'r', encoding='utf-8').readlines() for filename in module_list]
+
+module_list.append('ensure_modules')
+
 import_lines = [row for row in chain(*file_texts)
                 if (row.startswith('import ') or row.startswith('from '))]
 import_lines = [imp_row for imp_row in set(import_lines) if all(mod_name not in imp_row for mod_name in module_list)]

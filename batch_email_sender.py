@@ -206,12 +206,14 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
         self.update_preview_and_attaches_list(self.listWidget_emails.item(0))
 
     def open_xls_and_template(self):
+        filename, _ = QFileDialog.getOpenFileName(caption='Выберите список или шаблон', directory='',
+                                                  options=QFileDialog.Options(),
+                                                  filter="Список или шаблон (*list.xlsx *text.html);;Список (*list.xlsx);;Шаблон (*text.html);;All Files (*)")
+        if not filename:
+            return
         self.listWidget_emails.clear()
         self.listWidget_attachments.clear()
-        options = QFileDialog.Options()
-        filename, _ = QFileDialog.getOpenFileName(caption='Выберите список или шаблон', directory='',
-                                                  options=options,
-                                                  filter="Список или шаблон (*list.xlsx *text.html);;Список (*list.xlsx);;Шаблон (*text.html);;All Files (*)")
+        self.textBrowser.clear()
         os.chdir(os.path.dirname(filename))
         try:
             self.read_list_and_template(filename)
@@ -258,8 +260,7 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
             envelope.verify_credentials()
             return envelope
         else:
-            raise Exception('Необходимо ввести логин, пароль и т.д.')
-
+            raise ConnectionAbortedError('Необходимо ввести логин, пароль и т.д.')
 
     def start_threads_and_send_mails(self):
         mails_to_send = []
@@ -305,7 +306,6 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
             worker.sig_mail_sent.connect(self.on_mail_sent)
             worker.sig_mail_error.connect(self.on_mail_error)
 
-
             # control worker:
             self.sig_abort_workers.connect(worker.abort)
 
@@ -323,14 +323,14 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
         self.envelope = None
         try:
             self.envelope = self.ask_login_and_create_connection()
+        except ConnectionAbortedError:
+            pass
         except Exception as e:
             msg = 'Не могу подключиться к серверу: ' + str(e)
             QMessageBox.warning(self.listWidget_emails.parent(), 'Ошибка', msg)
             raise Exception(msg)
-
-        self.start_threads_and_send_mails()
-
-
+        else:
+            self.start_threads_and_send_mails()
 
 
 if __name__ == '__main__':
