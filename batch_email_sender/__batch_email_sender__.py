@@ -16,23 +16,23 @@ if not all(importlib.util.find_spec(name) for name in modules_to_check):
 
 
 # All imports
-from email.mime.text import MIMEText
-from email.utils import COMMASPACE, formatdate, formataddr
-from os.path import basename
-from typing import List
-from email.mime.multipart import MIMEMultipart
-import smtplib
-import keyring
-import openpyxl
-import os
-import subprocess
-import traceback
 import re
-from email.mime.application import MIMEApplication
+import keyring
+from email.mime.text import MIMEText
 from email.header import Header
-import sys
-import queue
+from typing import List
+from email.utils import COMMASPACE, formatdate, formataddr
+import os
+import smtplib
 from PyQt5 import QtCore, QtWidgets
+import queue
+from email.mime.multipart import MIMEMultipart
+from os.path import basename
+import sys
+import openpyxl
+import traceback
+import subprocess
+from email.mime.application import MIMEApplication
 from PyQt5.Qt import *
 
 
@@ -111,8 +111,8 @@ def rtv_table_and_template(xls_name, template_name):
     try:
         template.format(**first_data_row)
     except KeyError as e:
-        raise Exception('В таблице ' + xls_name + ' должен быть столбец ' + str(e) +
-                        ', так как он упоминается в шаблоне ' + template_name)
+        raise Exception('В таблице ' + xls_name + ' должен быть столбец ' + str(e)
+                        + ', так как он упоминается в шаблоне ' + template_name)
     # Теперь проверяем существование всех вложений
     attach_cols = [key for key in first_data_row if key.startswith('attach')]
     for rn, row in enumerate(rows_list):
@@ -123,8 +123,8 @@ def rtv_table_and_template(xls_name, template_name):
                 attach_name = row[attach_key]
                 if attach_name and not os.path.isfile(attach_name):
                     raise Exception('В таблице ' + xls_name + ' в строчке ' +
-                                    str(rn+ONE_PLUS_ONE_FOR_HEADER) + ' в столбце ' + attach_key +
-                                    ' указано вложение "' + attach_name + '". Этот файл не найден')
+                                    str(rn+ONE_PLUS_ONE_FOR_HEADER) + ' в столбце ' + attach_key
+                                    + ' указано вложение "' + attach_name + '". Этот файл не найден')
             row['attach_list'] = [row[attach_key] for attach_key in attach_cols]
         else:
             row['attach_list'] = []
@@ -448,7 +448,10 @@ class Extended_GUI(Ui_MainWindow, QObject):
         self.xlsx_rows_list = ''
         self.parent = mainw
         self.pushButton_open_list_and_template.clicked.connect(self.open_xls_and_template)
-        self.pushButton_ask_and_send.clicked.connect(self.send_msg)
+        self.pushButton_ask_and_send.clicked.connect(self.send_msg) # так нельзя! все же после каждого нажатия
+                                                                    # (даже после отмены ввода в диалоге) будет
+                                                                    # выполняться отправка  писем
+                                                                    # TODO: внять в логику программы (мне) и пофиксить багу
         self.pushButton_cancel_send.clicked.connect(self.abort_workers)
         QThread.currentThread().setObjectName('main')  # threads can be named, useful for log output
         self.__workers_done = None
