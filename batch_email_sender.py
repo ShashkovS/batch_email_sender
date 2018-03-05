@@ -94,7 +94,10 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
         self.xlsx_rows_list = ''
         self.parent = mainw
         self.pushButton_open_list_and_template.clicked.connect(self.open_xls_and_template)
-        self.pushButton_ask_and_send.clicked.connect(self.send_msg)
+        self.pushButton_ask_and_send.clicked.connect(self.send_msg) # так нельзя! все же после каждого нажатия
+                                                                    # (даже после отмены ввода в диалоге) будет
+                                                                    # выполняться отправка  писем
+                                                                    # TODO: внять в логику программы (мне) и пофиксить багу
         self.pushButton_cancel_send.clicked.connect(self.abort_workers)
         QThread.currentThread().setObjectName('main')  # threads can be named, useful for log output
         self.__workers_done = None
