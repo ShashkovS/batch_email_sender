@@ -1,18 +1,4 @@
-import pip
-try: import keyring
-except ModuleNotFoundError:
-    pip.main(['install', 'keyring'])
-    import keyring
-
-try: import openpyxl
-except ModuleNotFoundError:
-    pip.main(['install', 'openpyxl'])
-    import openpyxl
-
-try: import PyQt5
-except ModuleNotFoundError:
-    pip.main(['install', 'PyQt5'])
-    import PyQt5
+import ensure_modules
 
 import sys
 import traceback
