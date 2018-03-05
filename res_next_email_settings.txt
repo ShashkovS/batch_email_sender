@@ -1,5 +1,0 @@
-﻿FromMail: shashkov@179.ru
-gmail/yandex: gmail
-FromName: Сергей Шашков
-email_template: res_next_email_template.html
-email_list: res_next_email_list.xlsx

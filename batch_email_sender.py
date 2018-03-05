@@ -1,218 +1,344 @@
-import xlrd
-import getpass
-from envelopes import Envelope, GMailSMTP
-from random import choice
-from sys import exit
+import ensure_modules
+
+import sys
+import traceback
 import os
-import tempfile
-import shutil
-import yagmail
-import time
+import subprocess
+import re
+import keyring
+from PyQt5.Qt import *
 
-OKS = ['ok', 'good', 'yes', 'sure']
-
-os.chdir(r'C:\Dropbox\M2021\Собеседование в 7-й класс, 2017\Письма поступающим')
-email_settings = r'res_next_email_settings.txt'
-
-# ONLY_ONE = True
-ONLY_ONE = False
+import files_parsers
+import ui_email_and_passw
+import ui_main_window
+import email_stuff
 
 
+def excepthook(excType, excValue, tracebackobj):
+    traceback.print_tb(tracebackobj, excType, excValue)
 
-def transliterate(string):
-    capital_letters = {'А': 'A', 'Б': 'B', 'В': 'V', 'Г': 'G', 'Д': 'D', 'Е': 'E', 'Ё': 'E', 'Ж': 'Zh', 'З': 'Z', 'И': 'I', 'Й': 'Y', 'К': 'K', 'Л': 'L', 'М': 'M', 'Н': 'N', 'О': 'O', 'П': 'P', 'Р': 'R', 'С': 'S', 'Т': 'T', 'У': 'U', 'Ф': 'F', 'Х': 'H', 'Ц': 'Ts', 'Ч': 'Ch', 'Ш': 'Sh', 'Щ': 'Sch', 'Ъ': '', 'Ы': 'Y', 'Ь': '', 'Э': 'E', 'Ю': 'Yu', 'Я': 'Ya',}
-    lower_case_letters = {'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e', 'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch', 'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',}
-    translit_string = ""
-    for index, char in enumerate(string):
-        if char in lower_case_letters:
-            char = lower_case_letters[char]
-        elif char in capital_letters:
-            char = capital_letters[char]
-            if len(string) > index+1:
-                if string[index+1] not in lower_case_letters.keys():
-                    char = char.upper()
-            else:
-                char = char.upper()
-        translit_string += char
-    return translit_string
+sys.excepthook = excepthook
 
 
-def ask(data, question):
-    cur_cor_ans = choice(OKS)
-    print('\n'*5)
-    print('*'*100)
-    print(data)
-    print('*'*100)
-    print(question)
-    ask = input('Введите "' + cur_cor_ans + '", если всё ОК:\n')
-    if ask != cur_cor_ans:
-        print('Отменяем')
-        exit(0)
+KEYRING_SERVICE = "batch_email_sender"
+# Ключи, под которыми будут храниться данные
+LAST_FROMMAIL = "pSxx7tJyvgz2tk"
+LAST_MAILSERVER = "KjdsEYxeRaCk77"
+LAST_FROMNAME = "FY8Btthta4n3ZF"
+LAST_COPYLIST = "eqRyLeqKPatefP"
+LAST_SAVEFLAG = "8AN43xqzGhZHUa"
+LAST_PASSWORD = "uLkTjXd6BWa4tw"
+
+EMAIL_REGEX = r"\s*([a-zA-Z0-9'_][a-zA-Z0-9'._+-]{,63}@[a-zA-Z0-9.-]{,254}[a-zA-Z0-9])\s*"
 
 
-def rtv_template(template_name):
-    try:
-        with open(template_name, encoding='utf-8') as f:
-            template = f.read()
-    except FileNotFoundError:
-        os.chdir('..')
+
+class Worker(QObject):
+    sig_step = pyqtSignal(int, str)  # worker id, step description: emitted every step through work() loop
+    sig_done = pyqtSignal(int)  # worker id: emitted at end of work()
+    sig_mail_sent = pyqtSignal(int, int)
+    sig_mail_error = pyqtSignal(int)
+
+    def __init__(self, id: int, envelope):
+        super().__init__()
+        self.__id = id
+        self.__abort = False
+        self.envelope = envelope
+
+    @pyqtSlot()
+    def work(self):
+        """
+        Pretend this worker method does work that takes a long time. During this time, the thread's
+        event loop is blocked, except if the application's processEvents() is called: this gives every
+        thread (incl. main) a chance to process events, which in this sample means processing signals
+        received from GUI (such as abort).
+        """
+        thread_name = QThread.currentThread().objectName()
+        thread_id = int(QThread.currentThreadId())  # cast to int() is necessary
+        self.sig_step.emit(self.__id, 'Running worker #{} from thread "{}" (#{})'.format(self.__id, thread_name, thread_id))
+
+        while True:
+            batch_sender_app.processEvents()  # this could cause change to self.__abort
+            if self.__abort:
+                self.sig_step.emit(self.__id, 'Worker #{} aborting work at step {}'.format(self.__id, step))
+                break
+            qt_mail_id, xls_mail_id = -1, -1
+            try:
+                mail = self.envelope.send_next()
+                qt_mail_id, xls_mail_id, sent_to = mail['qt_id'], mail['xls_id'], mail['to_addrs']  # TODO здесь что-то грязно
+            except StopIteration:
+                break  # Это — победа
+            except Exception as e:
+                self.sig_step.emit(self.__id, f'Worker #{self.__id} error: {e!s}')
+            if qt_mail_id >= 0:
+                self.sig_step.emit(self.__id, f'Worker #{self.__id} sent to {sent_to}')
+                self.sig_mail_sent.emit(qt_mail_id, xls_mail_id)
+        self.sig_done.emit(self.__id)
+
+    def abort(self):
+        self.sig_step.emit(self.__id, 'Worker #{} notified to abort'.format(self.__id))
+        self.__abort = True
+
+
+class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
+    NUM_THREADS = 5
+    USE_THREADS = None
+
+    sig_abort_workers = pyqtSignal()
+
+    def __init__(self, mainw):
+        super().__init__()
+        self.setupUi(mainw)
+        self.CONFIG = ''
+        self.template = ''
+        self.xlsx_rows_list = ''
+        self.parent = mainw
+        self.pushButton_open_list_and_template.clicked.connect(self.open_xls_and_template)
+        self.pushButton_ask_and_send.clicked.connect(self.send_msg) # так нельзя! все же после каждого нажатия
+                                                                    # (даже после отмены ввода в диалоге) будет
+                                                                    # выполняться отправка  писем
+                                                                    # TODO: внять в логику программы (мне) и пофиксить багу
+        self.pushButton_cancel_send.clicked.connect(self.abort_workers)
+        QThread.currentThread().setObjectName('main')  # threads can be named, useful for log output
+        self.__workers_done = None
+        self.__threads = None
+
+    @pyqtSlot(int, str)
+    def on_worker_step(self, worker_id: int, data: str):
+        self.statusbar.showMessage('Worker #{}: {}'.format(worker_id, data))
+
+    @pyqtSlot(int, int)
+    def on_mail_sent(self, mail_widget_row_num: int, xls_row_number_ok: int):
+        item = self.listWidget_emails.item(mail_widget_row_num)
+        item.setBackground(QBrush(QColor("lightGreen")))  # Вах!
+        item.setCheckState(False)
         try:
-            with open(template_name, encoding='utf-8') as f:
-                template = f.read()
-        except FileNotFoundError:
-            print('Файл с шаблоном email_template.txt не найден')
-            exit(1)
-    ask(template, 'Это правильный шаблон?')
-    template = template.replace('\n', ' ')
-    return template
+            files_parsers.set_ok(self.xls_name, xls_row_number_ok)
+        except Exception as e:
+            print(e)
 
+    @pyqtSlot(int)
+    def on_mail_error(self, mail_widget_row_num: int):
+        item = self.listWidget_emails.item(mail_widget_row_num)
+        item.setBackground(QBrush(QColor("lightRed")))  # Вах!
 
-def rtv_settings():
-    try:
-        with open(email_settings, encoding='utf-8') as f:
-            settings_rows = f.readlines()
-    except FileNotFoundError:
-        print('Файл с настойками email_settings.txt не найден')
-        exit(1)
+    @pyqtSlot(int)
+    def on_worker_done(self, worker_id):
+        self.statusbar.showMessage('worker #{} done'.format(worker_id))
+        self.__workers_done += 1
+        if self.__workers_done == self.USE_THREADS:
+            self.statusbar.showMessage('No more workers active')
+            self.pushButton_ask_and_send.setEnabled(True)
+            self.pushButton_open_list_and_template.setEnabled(True)
+            self.pushButton_cancel_send.setDisabled(True)
+            QMessageBox.information(self.parent, 'OK', 'Все письма успешно отправлены!')
 
-    settings = {'FromMail': None, 'gmail/yandex': None, 'FromName': None, 'email_template': None, 'email_list': None}
-    for key in settings:
-        for row in settings_rows:
-            if key in row:
-                settings[key] = row[row.find(':')+1:].strip()
-    for key, val in settings.items():
-        if not val:
-            print(f'В файле {email_settings} не заполнен параметр', key)
-            exit(1)
-    if settings['gmail/yandex'] not in ['gmail', 'yandex']:
-        print('В качестве почты (настройка gmail/yandex) поддерживается пока только yandex и gmail')
-        exit(1)
-    ask(settings, 'Настройки для отправки в норме?')
-    return settings
+    @pyqtSlot()
+    def abort_workers(self):
+        self.sig_abort_workers.emit()
+        self.statusbar.showMessage('Asking each worker to abort')
+        for thread, worker in self.__threads:
+            thread.quit()  # this will quit **as soon as thread event loop unblocks**
+            thread.wait()  # <- so you need to wait for it to *actually* quit
+        # even though threads have exited, there may still be messages on the main thread's
+        # queue (messages that threads emitted before the abort):
+        self.statusbar.showMessage('All threads exited')
+        self.pushButton_ask_and_send.setEnabled(True)
+        self.pushButton_open_list_and_template.setEnabled(True)
+        self.pushButton_cancel_send.setDisabled(True)
 
+    def show_email_attach(self, item):
+        for i in range(self.listWidget_attachments.count()):
+            if self.listWidget_attachments.item(i) == item and self.listWidget_attachments.item(i).text():
+                if sys.platform.startswith('darwin'):
+                    subprocess.call(('open', item.text()))
+                elif os.name == 'nt':
+                    os.startfile(item.text())
+                elif os.name == 'posix':
+                    subprocess.call(('xdg-open', item.text()))
 
-def rtv_table(xls_name):
-    try:
-        xl_workbook = xlrd.open_workbook(xls_name)
-    except FileNotFoundError:
-        print(f'Файл {xls_name} не найден')
-        exit(1)
-    xl_sheet = xl_workbook.sheet_by_index(0)
-    columns = {}
-    for i in range(xl_sheet.ncols):
-        title = str(xl_sheet.cell(0,i).value)
-        if title:
-            columns[title] = i
-    result = []
-    for j in range(1, xl_sheet.nrows):
-        cur = columns.copy()
-        for key, col in columns.items():
-            cur[key] = str(xl_sheet.cell(j,col).value)
-        result.append(cur)
-    ask('\n'.join(map(str, result)), 'Данные для отправки похожи на правду?')
-    return result
+    def read_list_and_template(self, filename):
+        # filename — это либо имя excel'ника, либо имя html-шаблона. По имени определяем, что это, и определяем
+        # оставшиеся имена
+        self.template = None
+        self.xlsx_rows_list = None
+        self.pushButton_ask_and_send.setDisabled(True)
+        filename = filename.lower()
+        if filename.endswith('list.xlsx'):
+            xls_name = filename
+            template_name = filename.replace('list.xlsx', 'text.html')
+        elif filename.endswith('text.html'):
+            xls_name = filename.replace('text.html', 'list.xlsx')
+            template_name = filename
+        else:
+            raise Exception(f'Нужно выбрать файл со списком ***list.xlsx или файл с шаблоном письма ***text.html')
+        rows_list, bold_columns, template = files_parsers.rtv_table_and_template(xls_name, template_name)
+        self.xls_name = xls_name
+        self.template_name = template_name
+        self.template = template
+        self.xlsx_rows_list = rows_list
+        if 'email' not in bold_columns:
+            bold_columns.append('email')
+        self.info_cols = bold_columns
+        self.pushButton_ask_and_send.setEnabled(True)
 
+    def update_preview_and_attaches_list(self, item):
+        for i in range(self.listWidget_emails.count()):
+            if self.listWidget_emails.item(i) == item:
+                xlsx_row = self.xlsx_rows_list[i]
+                self.textBrowser.setText(self.template.format(**xlsx_row))
+                self.listWidget_attachments.clear()
+                self.listWidget_attachments.addItems(xlsx_row['attach_list'])
+                break
 
-def check_template_vs_table(template, table):
-    if table:
+    def fill_widgets_with_emails(self):
+        if not self.template or not self.xlsx_rows_list:
+            return
+        for xlsx_row in self.xlsx_rows_list:
+            sample_row_text = ' '.join([xlsx_row[col] if col != 'email' else ', '.join(xlsx_row[col])
+                                        for col in self.info_cols])
+            item = QListWidgetItem(sample_row_text)
+            item.xlsx_row = xlsx_row  # Именно отсюда мы возьмём данные для отправки
+            item.setCheckState(Qt.Checked)
+            if xlsx_row[files_parsers.OKOK] == files_parsers.OKOK:
+                item.setCheckState(False)
+                item.setBackground(QBrush(QColor("lightGreen")))  # Вах!
+            self.listWidget_emails.addItem(item)
+        self.listWidget_emails.itemClicked.connect(self.update_preview_and_attaches_list)
+        self.listWidget_attachments.itemClicked.connect(self.show_email_attach)
+        self.update_preview_and_attaches_list(self.listWidget_emails.item(0))
+
+    def open_xls_and_template(self):
+        filename, _ = QFileDialog.getOpenFileName(caption='Выберите список или шаблон', directory='',
+                                                  options=QFileDialog.Options(),
+                                                  filter="Список или шаблон (*list.xlsx *text.html);;Список (*list.xlsx);;Шаблон (*text.html);;All Files (*)")
+        if not filename:
+            return
+        self.listWidget_emails.clear()
+        self.listWidget_attachments.clear()
+        self.textBrowser.clear()
+        os.chdir(os.path.dirname(filename))
         try:
-            dummy = (template + '{email}{subject}').format(**table[0])
-        except KeyError as e:
-            print('Поля', e, 'из шаблона нет в таблице')
-            exit(1)
+            self.read_list_and_template(filename)
+        except Exception as e:
+            QMessageBox.information(self.parent, 'OK', 'Ошибка: ' + str(e))
+        self.fill_widgets_with_emails()
+
+    def ask_login_and_create_connection(self):
+        loginf = QDialog()
+        diagui = ui_email_and_passw.Ui_Dialog()
+        diagui.setupUi(loginf)
+
+        last_frommail = keyring.get_password(KEYRING_SERVICE, LAST_FROMMAIL)
+        last_fromname = keyring.get_password(KEYRING_SERVICE, LAST_FROMNAME)
+        last_mailserver = keyring.get_password(KEYRING_SERVICE, LAST_MAILSERVER)
+        last_copylist = keyring.get_password(KEYRING_SERVICE, LAST_COPYLIST)
+        last_saveflag = keyring.get_password(KEYRING_SERVICE, LAST_SAVEFLAG)
+        last_password = keyring.get_password(KEYRING_SERVICE, LAST_PASSWORD)
+        diagui.line_email.setText(last_frommail or '')
+        diagui.line_password.setText(last_password or '')
+        diagui.line_sender.setText(last_fromname or '')
+        diagui.line_smtpserver.setText(last_mailserver or 'smtp.googlemail.com')
+        diagui.line_send_copy.setText(last_copylist or '')
+        diagui.save_passw_cb.setCheckState(bool(last_saveflag))
+        if loginf.exec_() == QDialog.Accepted:
+            last_frommail = diagui.line_email.text()
+            last_password = diagui.line_password.text()
+            last_fromname = diagui.line_sender.text()
+            last_mailserver = diagui.line_smtpserver.text()
+            last_copylist = diagui.line_send_copy.text()
+            last_saveflag = '1' if diagui.save_passw_cb.checkState() else ''
+            keyring.set_password(KEYRING_SERVICE, LAST_FROMMAIL, last_frommail)
+            keyring.set_password(KEYRING_SERVICE, LAST_FROMNAME, last_fromname)
+            keyring.set_password(KEYRING_SERVICE, LAST_MAILSERVER, last_mailserver)
+            keyring.set_password(KEYRING_SERVICE, LAST_COPYLIST, last_copylist)
+            keyring.set_password(KEYRING_SERVICE, LAST_SAVEFLAG, last_saveflag)
+            keyring.set_password(KEYRING_SERVICE, LAST_PASSWORD, last_password if last_saveflag else '')
+            envelope = email_stuff.EmailEnvelope(smtp_server=last_mailserver,
+                                             login=last_frommail,
+                                             password=last_password,
+                                             sender_addr=last_frommail,
+                                             sender_name=last_fromname,
+                                             copy_addrs=re.findall(EMAIL_REGEX, last_copylist))
+            envelope.verify_credentials()
+            return envelope
+        else:
+            raise ConnectionAbortedError('Необходимо ввести логин, пароль и т.д.')
+
+    def start_threads_and_send_mails(self):
+        mails_to_send = []
+        for i in range(self.listWidget_emails.count()):
+            item = self.listWidget_emails.item(i)
+            if item.checkState():
+                item.setSelected(True)
+                xlsx_row = item.xlsx_row
+                xlsx_row['QListWidgetIndex_WcCRve89'] = i  # Сохраняем номер строки, чтобы потом легко пометить её зелёным
+                mails_to_send.append(item.xlsx_row)
+        if not mails_to_send:
+            msg = 'Ни одно письмо для отправки не выбрано'
+            QMessageBox.information(self.parent, 'OK', msg)
+            raise Exception(msg)
+        # Создаём по отправляльщику на каждый worker
+        # Равномерно распределяем на них на всех почту
+        self.USE_THREADS = min(self.NUM_THREADS, len(mails_to_send))
+        envelopes = [self.envelope.copy() for __ in range(self.USE_THREADS)]
+        for i, xlsx_row in enumerate(mails_to_send):
+            envelopes[i % self.USE_THREADS].add_mail_to_queue(recipients=xlsx_row['email'],
+                                                              subject=xlsx_row['subject'],
+                                                              html=self.template.format(**xlsx_row),
+                                                              files=xlsx_row['attach_list'],
+                                                              xls_id=xlsx_row[files_parsers.ORIGINAL_ROW_NUM],
+                                                              qt_id=xlsx_row['QListWidgetIndex_WcCRve89'])
+        # Лочим кнопки
+        self.pushButton_ask_and_send.setDisabled(True)
+        self.pushButton_open_list_and_template.setDisabled(True)
+        self.pushButton_cancel_send.setEnabled(True)
+        # Готовим worker'ов
+        self.__workers_done = 0
+        self.__threads = []
+        for idx in range(self.USE_THREADS):
+            worker = Worker(idx, envelopes[idx])
+            thread = QThread()
+            thread.setObjectName('thread_' + str(idx))
+            self.__threads.append((thread, worker))  # need to store worker too otherwise will be gc'd
+            worker.moveToThread(thread)
+
+            # get progress messages from worker:
+            worker.sig_step.connect(self.on_worker_step)
+            worker.sig_done.connect(self.on_worker_done)
+            worker.sig_mail_sent.connect(self.on_mail_sent)
+            worker.sig_mail_error.connect(self.on_mail_error)
+
+            # control worker:
+            self.sig_abort_workers.connect(worker.abort)
+
+            # get read to start worker:
+            thread.started.connect(worker.work)
+            thread.start()  # this will emit 'started' and start thread's event loop
 
 
-def connect_to_smtp(FromMail, gmail_yandex):
-    if gmail_yandex == 'gmail':
-        GMailSMTP.GMAIL_SMTP_HOST = 'smtp.googlemail.com'
-    elif gmail_yandex == 'yandex':
-        GMailSMTP.GMAIL_SMTP_HOST = 'smtp.yandex.ru'
-    print('Сейчас нужно будет ввести пароль от почты.')
-    password = getpass.getpass('Enter password: ')
-    # password = input('password')
-    print('Пароль принят, пытаемся подключиться.')
-    # gmail = GMailSMTP(FromMail, password)
-    gmail = yagmail.SMTP(FromMail, password)
-    del password
-    print('Удалось подключиться для отправки писем.')
-    return gmail
+    def send_msg(self):
+        # Перед отправкой должен быть закружен шаблон и список
+        if not self.xlsx_rows_list or not self.template:
+            QMessageBox.warning(self.listWidget_emails.parent(), 'Ошибка', 'Сначала нужно открыть шаблон и список рассылки')
+            raise Exception()
 
-
-def send_mail(FromMail, FromName, gmail, template, data_row, first_mail=[]):
-    mail_text = template.format(**data_row)
-    if not first_mail:
-        ask_mail_text = mail_text[:]
-        ask_mail_text = ask_mail_text.replace('<table', '\n<table')
-        ask_mail_text = ask_mail_text.replace('<tr>', '\n<tr>')
-        ask_mail_text = ask_mail_text.replace('<p>', '\n<p>')
-        ask_mail_text = ask_mail_text.replace('<br>', '\n<br>')
-        ask_mail_text = ask_mail_text.replace('<br/>', '\n<br/>')
-        ask(ask_mail_text, 'Первое письмо выглядит так, это правильно?')
-        first_mail.append('Не в первой')
-    with tempfile.TemporaryDirectory() as tmpdirname:
-        # envelope = Envelope(
-        #     from_addr=(FromMail, FromName),
-        #     to_addr=data_row['email'],
-        #     subject=data_row['subject'],
-        #     html_body=mail_text
-        # )
-        to_addr = data_row['email']
-        subject = data_row['subject']
-        contents = [mail_text]
-        # os.chdir(r'C:\Dropbox\M2021\Собеседование в 7-й класс, 2017\Сканы работ\По школьникам')
-        if 'attach1' in data_row:
-            fr_n = data_row['attach1']
-            contents.append(fr_n)
-            # to_n = os.path.join(tmpdirname, transliterate(os.path.basename(fr_n)))
-            # shutil.copyfile(fr_n, to_n)
-            # envelope.add_attachment(to_n, mimetype='application/pdf')
-
-        if 'attach2' in data_row:
-            fr_n = data_row['attach2']
-            contents.append(fr_n)
-            # to_n = os.path.join(tmpdirname, transliterate(os.path.basename(fr_n)))
-            # shutil.copyfile(fr_n, to_n)
-            # envelope.add_attachment(to_n, mimetype='application/pdf')
-
+        self.envelope = None
         try:
-            # gmail.send(envelope)
-            gmail.send(to=to_addr, subject=subject, contents=contents)
-            res = 'Отправили письмо по адресу ' + data_row['email']
-            print(res)
-        except:
-            res = 'ОШИБКА ОТПРАВКИ ПО АДРЕСУ ' + data_row['email']
-            print(res)
-            print('При отправке через сервера gmail, нужно временно разрешить доступ непроверенным приложениям.')
-            print('Это нужно сделать по ссылке: https://www.google.com/settings/security/lesssecureapps?rfn=27&rfnc=1&et=0&asae=2')
-        if ONLY_ONE: exit()
-        return res
+            self.envelope = self.ask_login_and_create_connection()
+        except ConnectionAbortedError:
+            pass
+        except Exception as e:
+            msg = 'Не могу подключиться к серверу: ' + str(e)
+            QMessageBox.warning(self.listWidget_emails.parent(), 'Ошибка', msg)
+            raise Exception(msg)
+        else:
+            self.start_threads_and_send_mails()
 
 
-print(f'Будем читать настройки из файла {email_settings}')
-settings = rtv_settings()
-print(f'Будем читать шаблон из файла {settings["email_template"]}')
-template = rtv_template(settings['email_template'])
-print(f'Будем читать список адресов из файла {settings["email_list"]}')
-table = rtv_table(settings['email_list'])
-print('Вычитали таблицу, проверяем корректность шаблона')
-check_template_vs_table(template, table)
-print('Коннектимся...')
-gmail = 1
-# gmail = connect_to_smtp(settings['FromMail'], settings['gmail/yandex'])
-sent = 0
-with open('log.txt', 'w', encoding='utf-8') as f:
-    for data_row in table:
-        if not data_row['email'].strip():
-            continue
-        sent += 1
-        if sent % 60 == 0:
-            gmail.close()
-            time.sleep(10)
-            gmail = connect_to_smtp(settings['FromMail'], settings['gmail/yandex'])
-        res = send_mail(settings['FromMail'], settings['FromName'], gmail, template, data_row)
-        f.write(res)
-        f.write('\n')
-
-print('Всё завершено')
-# input('Введить что-нибудь за завершения. Лог отправки можно найти в файле log.txt')
-exit(0)
+if __name__ == '__main__':
+    batch_sender_app = QApplication(sys.argv)
+    main_window = QMainWindow()
+    ui = Extended_GUI(main_window)
+    main_window.show()
+    sys.exit(batch_sender_app.exec_())
