@@ -69,9 +69,9 @@ class Worker(QObject):
             except StopIteration:
                 break  # Это — победа
             except Exception as e:
-                self.sig_step.emit(self.__id, f'Worker #{self.__id} error: {e!s}')
+                self.sig_step.emit(self.__id, 'Worker #{} error: {}'.format(self.__id, e))
             if qt_mail_id >= 0:
-                self.sig_step.emit(self.__id, f'Worker #{self.__id} sent to {sent_to}')
+                self.sig_step.emit(self.__id, 'Worker #{} sent to {}'.format(self.__id, sent_to))
                 self.sig_mail_sent.emit(qt_mail_id, xls_mail_id)
         self.sig_done.emit(self.__id)
 
@@ -171,7 +171,7 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
             xls_name = filename.replace('text.html', 'list.xlsx')
             template_name = filename
         else:
-            raise Exception(f'Нужно выбрать файл со списком ***list.xlsx или файл с шаблоном письма ***text.html')
+            raise Exception('Нужно выбрать файл со списком ***list.xlsx или файл с шаблоном письма ***text.html')
         rows_list, bold_columns, template = files_parsers.rtv_table_and_template(xls_name, template_name)
         self.xls_name = xls_name
         self.template_name = template_name
