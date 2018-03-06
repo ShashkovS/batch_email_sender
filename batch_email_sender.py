@@ -60,7 +60,7 @@ class Worker(QObject):
         while True:
             batch_sender_app.processEvents()  # this could cause change to self.__abort
             if self.__abort:
-                self.sig_step.emit(self.__id, 'Worker #{} aborting work at step {}'.format(self.__id, step))
+                self.sig_step.emit(self.__id, 'Worker #{} aborting work'.format(self.__id))
                 break
             qt_mail_id, xls_mail_id = -1, -1
             try:
@@ -186,7 +186,8 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
         for i in range(self.listWidget_emails.count()):
             if self.listWidget_emails.item(i) == item:
                 xlsx_row = self.xlsx_rows_list[i]
-                self.textBrowser.setText(self.template.format(**xlsx_row))
+                self.textBrowser.setText('<h2>{}</h2><hr>\n'.format(xlsx_row['subject'])
+                                         + self.template.format(**xlsx_row))
                 self.listWidget_attachments.clear()
                 self.listWidget_attachments.addItems(xlsx_row['attach_list'])
                 break

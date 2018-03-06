@@ -16,24 +16,24 @@ if not all(importlib.util.find_spec(name) for name in modules_to_check):
 
 
 # All imports
-import os
 from email.header import Header
-from email.mime.text import MIMEText
-import sys
-from PyQt5 import QtCore, QtWidgets
-import openpyxl
 from PyQt5.Qt import *
-import keyring
-from email.utils import COMMASPACE, formatdate, formataddr
-import re
-from os.path import basename
-from typing import List
+from email.mime.text import MIMEText
 import subprocess
-from email.mime.application import MIMEApplication
-import queue
-from email.mime.multipart import MIMEMultipart
-import smtplib
+import os
+from typing import List
 import traceback
+import re
+from email.mime.multipart import MIMEMultipart
+from os.path import basename
+import sys
+import queue
+from email.mime.application import MIMEApplication
+from PyQt5 import QtCore, QtWidgets
+import keyring
+import smtplib
+import openpyxl
+from email.utils import COMMASPACE, formatdate, formataddr
 
 
 
@@ -414,7 +414,7 @@ class Worker(QObject):
         while True:
             batch_sender_app.processEvents()  # this could cause change to self.__abort
             if self.__abort:
-                self.sig_step.emit(self.__id, 'Worker #{} aborting work at step {}'.format(self.__id, step))
+                self.sig_step.emit(self.__id, 'Worker #{} aborting work'.format(self.__id))
                 break
             qt_mail_id, xls_mail_id = -1, -1
             try:
@@ -540,7 +540,8 @@ class Extended_GUI(Ui_MainWindow, QObject):
         for i in range(self.listWidget_emails.count()):
             if self.listWidget_emails.item(i) == item:
                 xlsx_row = self.xlsx_rows_list[i]
-                self.textBrowser.setText(self.template.format(**xlsx_row))
+                self.textBrowser.setText('<h2>{}</h2><hr>\n'.format(xlsx_row['subject'])
+                                         + self.template.format(**xlsx_row))
                 self.listWidget_attachments.clear()
                 self.listWidget_attachments.addItems(xlsx_row['attach_list'])
                 break
