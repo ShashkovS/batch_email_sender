@@ -69,9 +69,9 @@ class Worker(QObject):
             except StopIteration:
                 break  # Это — победа
             except Exception as e:
-                self.sig_step.emit(self.__id, 'Worker #' + self.__id + ' error: ' + str(e))
+                self.sig_step.emit(self.__id, 'Worker #{} error: {}'.format(self.__id, e))
             if qt_mail_id >= 0:
-                self.sig_step.emit(self.__id, 'Worker #' + self.__id + ' sent to ' + sent_to)
+                self.sig_step.emit(self.__id, 'Worker #{} sent to {}'.format(self.__id, sent_to))
                 self.sig_mail_sent.emit(qt_mail_id, xls_mail_id)
         self.sig_done.emit(self.__id)
 

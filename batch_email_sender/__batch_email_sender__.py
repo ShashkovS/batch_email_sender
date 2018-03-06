@@ -16,24 +16,24 @@ if not all(importlib.util.find_spec(name) for name in modules_to_check):
 
 
 # All imports
-import re
-import keyring
-from email.mime.text import MIMEText
-from email.header import Header
-from typing import List
-from email.utils import COMMASPACE, formatdate, formataddr
 import os
-import smtplib
-from PyQt5 import QtCore, QtWidgets
-import queue
-from email.mime.multipart import MIMEMultipart
-from os.path import basename
+from email.header import Header
+from email.mime.text import MIMEText
 import sys
+from PyQt5 import QtCore, QtWidgets
 import openpyxl
-import traceback
+from PyQt5.Qt import *
+import keyring
+from email.utils import COMMASPACE, formatdate, formataddr
+import re
+from os.path import basename
+from typing import List
 import subprocess
 from email.mime.application import MIMEApplication
-from PyQt5.Qt import *
+import queue
+from email.mime.multipart import MIMEMultipart
+import smtplib
+import traceback
 
 
 
@@ -423,9 +423,9 @@ class Worker(QObject):
             except StopIteration:
                 break  # Это — победа
             except Exception as e:
-                self.sig_step.emit(self.__id, 'Worker #' + self.__id + ' error: ' + str(e))
+                self.sig_step.emit(self.__id, 'Worker #{} error: {}'.format(self.__id, e))
             if qt_mail_id >= 0:
-                self.sig_step.emit(self.__id, 'Worker #' + self.__id + ' sent to ' + sent_to)
+                self.sig_step.emit(self.__id, 'Worker #{} sent to {}'.format(self.__id, sent_to))
                 self.sig_mail_sent.emit(qt_mail_id, xls_mail_id)
         self.sig_done.emit(self.__id)
 
