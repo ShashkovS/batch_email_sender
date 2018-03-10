@@ -60,7 +60,7 @@ class Worker(QObject):
         while True:
             batch_sender_app.processEvents()  # this could cause change to self.__abort
             if self.__abort:
-                self.sig_step.emit(self.__id, 'Worker #{} aborting work at step {}'.format(self.__id, step))
+                self.sig_step.emit(self.__id, 'Worker #{} aborting work'.format(self.__id))
                 break
             qt_mail_id, xls_mail_id = -1, -1
             try:
@@ -172,21 +172,22 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
             template_name = filename
         else:
             raise Exception('Нужно выбрать файл со списком ***list.xlsx или файл с шаблоном письма ***text.html')
-        rows_list, bold_columns, template = files_parsers.rtv_table_and_template(xls_name, template_name)
+        rows_list, preview_columns, template = files_parsers.rtv_table_and_template(xls_name, template_name)
         self.xls_name = xls_name
         self.template_name = template_name
         self.template = template
         self.xlsx_rows_list = rows_list
-        if 'email' not in bold_columns:
-            bold_columns.append('email')
-        self.info_cols = bold_columns
+        if 'email' not in preview_columns:
+            preview_columns.append('email')
+        self.info_cols = preview_columns
         self.pushButton_ask_and_send.setEnabled(True)
 
     def update_preview_and_attaches_list(self, item):
         for i in range(self.listWidget_emails.count()):
             if self.listWidget_emails.item(i) == item:
                 xlsx_row = self.xlsx_rows_list[i]
-                self.textBrowser.setText(self.template.format(**xlsx_row))
+                self.textBrowser.setText('<h2>{}</h2><hr>\n'.format(xlsx_row['subject'])
+                                         + self.template.format(**xlsx_row))
                 self.listWidget_attachments.clear()
                 self.listWidget_attachments.addItems(xlsx_row['attach_list'])
                 break
@@ -255,11 +256,11 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
             keyring.set_password(KEYRING_SERVICE, LAST_SAVEFLAG, last_saveflag)
             keyring.set_password(KEYRING_SERVICE, LAST_PASSWORD, last_password if last_saveflag else '')
             envelope = email_stuff.EmailEnvelope(smtp_server=last_mailserver,
-                                             login=last_frommail,
-                                             password=last_password,
-                                             sender_addr=last_frommail,
-                                             sender_name=last_fromname,
-                                             copy_addrs=re.findall(EMAIL_REGEX, last_copylist))
+                                                 login=last_frommail,
+                                                 password=last_password,
+                                                 sender_addr=last_frommail,
+                                                 sender_name=last_fromname,
+                                                 copy_addrs=re.findall(EMAIL_REGEX, last_copylist))
             envelope.verify_credentials()
             return envelope
         else:

@@ -15,15 +15,17 @@ def rtv_table(xls_name):
     xl_sheet_names = xl_workbook.sheetnames
     xl_sheet = xl_workbook[xl_sheet_names[0]]
     columns = []
-    bold_columns = []
+    preview_columns = []
     row_iter = iter(xl_sheet.rows)
     for cell in next(row_iter):
         title = str(cell.value)
         if title:
             columns.append(title) # cell.column
             if cell.font.bold:
-                bold_columns.append(title)
+                preview_columns.append(title)
     row_dict = {title: '' for title in columns}
+    if 'email' not in row_dict:
+        raise Exception('В файле {} обязательно должен быть столбец email'.format(xls_name))
     rows_list = []
     for rn, row in enumerate(row_iter, start=2):
         cur = row_dict.copy()
@@ -32,7 +34,7 @@ def rtv_table(xls_name):
             cur[col_name] = str(cell.value).replace('None', '')
         cur['email'] = re.findall(EMAIL_REGEX, cur['email'])
         rows_list.append(cur)
-    return rows_list, bold_columns
+    return rows_list, preview_columns
 
 
 def set_ok(xls_name, row_num_real):
@@ -61,7 +63,7 @@ def rtv_template(template_name):
 
 
 def rtv_table_and_template(xls_name, template_name):
-    rows_list, bold_columns = rtv_table(xls_name)
+    rows_list, preview_columns = rtv_table(xls_name)
     template = rtv_template(template_name)
     if not rows_list:
         raise Exception('В файле ' + xls_name + ' не обнаружены строки с данными')
@@ -70,6 +72,10 @@ def rtv_table_and_template(xls_name, template_name):
     for col_name in ['ok', 'email', 'subject']:
         if col_name not in first_data_row:
             raise Exception('В таблице ' + xls_name + ' обязательно должен быть столбец ' + col_name)
+    # Выкидываем строчки, в которых не заполнен email
+    for i in range(len(rows_list) - 1, -1, -1):
+        if not rows_list[i]['email']:
+            rows_list.pop(i)
     # Проверяем, что есть всё, что указано в шаблоне
     try:
         template.format(**first_data_row)
@@ -79,29 +85,25 @@ def rtv_table_and_template(xls_name, template_name):
     # Теперь проверяем существование всех вложений
     attach_cols = [key for key in first_data_row if key.startswith('attach')]
     for rn, row in enumerate(rows_list):
-        if attach_cols:
-            if not row['email']:
-                continue
-            for attach_key in attach_cols:
-                attach_name = row[attach_key]
-                if attach_name and not os.path.isfile(attach_name):
-                    raise Exception('В таблице ' + xls_name + ' в строчке ' +
-                                    str(rn+ONE_PLUS_ONE_FOR_HEADER) + ' в столбце ' + attach_key
-                                    + ' указано вложение "' + attach_name + '". Этот файл не найден')
-            row['attach_list'] = [row[attach_key] for attach_key in attach_cols]
-        else:
-            row['attach_list'] = []
+        row['attach_list'] = []
+        for attach_key in attach_cols:
+            attach_name = row[attach_key]
+            if attach_name and not os.path.isfile(attach_name):
+                raise Exception('В таблице ' + xls_name + ' в строчке ' +
+                                str(rn+ONE_PLUS_ONE_FOR_HEADER) + ' в столбце ' + attach_key
+                                + ' указано вложение "' + attach_name + '". Этот файл не найден')
+            row['attach_list'].append(attach_name)
     # Проверили, что всё работает. Проверили, что вложения существуют
-    return rows_list, bold_columns, template
+    return rows_list, preview_columns, template
 
 # import os
 # os.chdir(r'C:\Dropbox\repos\batch_email_sender')
 # xls_name = 'send_list.xlsx'
 # template_name = 'send_template.html'
-# rows_list, bold_columns, template = rtv_table_and_template(xls_name, template_name)
-# print(rows_list, bold_columns, template)
+# rows_list, preview_columns, template = rtv_table_and_template(xls_name, template_name)
+# print(rows_list, preview_columns, template)
 
-# result, bold_columns = rtv_table(xls_name)
-# print(bold_columns)
+# result, preview_columns = rtv_table(xls_name)
+# print(preview_columns)
 # for row in result:
 #     print(row)

@@ -39,3 +39,12 @@ for regex in replacers:
 
 with open(DESTINATION_FILE, 'w', encoding='utf-8') as f:
     f.write(joined_text)
+
+
+
+import re, requests
+re.findall(r'(?s)<tr>' + r'\s*<td>\s*(.*?)\s*</td>' * 7 + r'\s*</tr>',
+           requests.post(r'https://reg.olimpiada.ru/rusolymp-summary/search/',
+              data=dict(login='sch778179', stage='_', subject='%', year=2017))
+              .content.decode('utf-8')
+              .replace(r'<!--  -->', '').replace('\n\n', ''))

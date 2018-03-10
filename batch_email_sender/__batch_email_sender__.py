@@ -16,23 +16,23 @@ if not all(importlib.util.find_spec(name) for name in modules_to_check):
 
 
 # All imports
-import os
 from email.header import Header
-from email.mime.text import MIMEText
 import sys
-from PyQt5 import QtCore, QtWidgets
-import openpyxl
 from PyQt5.Qt import *
-import keyring
-from email.utils import COMMASPACE, formatdate, formataddr
-import re
-from os.path import basename
+from PyQt5 import QtCore, QtWidgets
 from typing import List
-import subprocess
-from email.mime.application import MIMEApplication
-import queue
-from email.mime.multipart import MIMEMultipart
+import os
+import re
 import smtplib
+from os.path import basename
+import subprocess
+import queue
+from email.utils import COMMASPACE, formatdate, formataddr
+import openpyxl
+from email.mime.application import MIMEApplication
+import keyring
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 import traceback
 
 
@@ -52,15 +52,17 @@ def rtv_table(xls_name):
     xl_sheet_names = xl_workbook.sheetnames
     xl_sheet = xl_workbook[xl_sheet_names[0]]
     columns = []
-    bold_columns = []
+    preview_columns = []
     row_iter = iter(xl_sheet.rows)
     for cell in next(row_iter):
         title = str(cell.value)
         if title:
             columns.append(title) # cell.column
             if cell.font.bold:
-                bold_columns.append(title)
+                preview_columns.append(title)
     row_dict = {title: '' for title in columns}
+    if 'email' not in row_dict:
+        raise Exception('В файле {} обязательно должен быть столбец email'.format(xls_name))
     rows_list = []
     for rn, row in enumerate(row_iter, start=2):
         cur = row_dict.copy()
@@ -69,7 +71,7 @@ def rtv_table(xls_name):
             cur[col_name] = str(cell.value).replace('None', '')
         cur['email'] = re.findall(EMAIL_REGEX, cur['email'])
         rows_list.append(cur)
-    return rows_list, bold_columns
+    return rows_list, preview_columns
 
 
 def set_ok(xls_name, row_num_real):
@@ -98,7 +100,7 @@ def rtv_template(template_name):
 
 
 def rtv_table_and_template(xls_name, template_name):
-    rows_list, bold_columns = rtv_table(xls_name)
+    rows_list, preview_columns = rtv_table(xls_name)
     template = rtv_template(template_name)
     if not rows_list:
         raise Exception('В файле ' + xls_name + ' не обнаружены строки с данными')
@@ -107,6 +109,10 @@ def rtv_table_and_template(xls_name, template_name):
     for col_name in ['ok', 'email', 'subject']:
         if col_name not in first_data_row:
             raise Exception('В таблице ' + xls_name + ' обязательно должен быть столбец ' + col_name)
+    # Выкидываем строчки, в которых не заполнен email
+    for i in range(len(rows_list) - 1, -1, -1):
+        if not rows_list[i]['email']:
+            rows_list.pop(i)
     # Проверяем, что есть всё, что указано в шаблоне
     try:
         template.format(**first_data_row)
@@ -116,20 +122,16 @@ def rtv_table_and_template(xls_name, template_name):
     # Теперь проверяем существование всех вложений
     attach_cols = [key for key in first_data_row if key.startswith('attach')]
     for rn, row in enumerate(rows_list):
-        if attach_cols:
-            if not row['email']:
-                continue
-            for attach_key in attach_cols:
-                attach_name = row[attach_key]
-                if attach_name and not os.path.isfile(attach_name):
-                    raise Exception('В таблице ' + xls_name + ' в строчке ' +
-                                    str(rn+ONE_PLUS_ONE_FOR_HEADER) + ' в столбце ' + attach_key
-                                    + ' указано вложение "' + attach_name + '". Этот файл не найден')
-            row['attach_list'] = [row[attach_key] for attach_key in attach_cols]
-        else:
-            row['attach_list'] = []
+        row['attach_list'] = []
+        for attach_key in attach_cols:
+            attach_name = row[attach_key]
+            if attach_name and not os.path.isfile(attach_name):
+                raise Exception('В таблице ' + xls_name + ' в строчке ' +
+                                str(rn+ONE_PLUS_ONE_FOR_HEADER) + ' в столбце ' + attach_key
+                                + ' указано вложение "' + attach_name + '". Этот файл не найден')
+            row['attach_list'].append(attach_name)
     # Проверили, что всё работает. Проверили, что вложения существуют
-    return rows_list, bold_columns, template
+    return rows_list, preview_columns, template
 
 
 
@@ -414,7 +416,7 @@ class Worker(QObject):
         while True:
             batch_sender_app.processEvents()  # this could cause change to self.__abort
             if self.__abort:
-                self.sig_step.emit(self.__id, 'Worker #{} aborting work at step {}'.format(self.__id, step))
+                self.sig_step.emit(self.__id, 'Worker #{} aborting work'.format(self.__id))
                 break
             qt_mail_id, xls_mail_id = -1, -1
             try:
@@ -526,21 +528,22 @@ class Extended_GUI(Ui_MainWindow, QObject):
             template_name = filename
         else:
             raise Exception('Нужно выбрать файл со списком ***list.xlsx или файл с шаблоном письма ***text.html')
-        rows_list, bold_columns, template = rtv_table_and_template(xls_name, template_name)
+        rows_list, preview_columns, template = rtv_table_and_template(xls_name, template_name)
         self.xls_name = xls_name
         self.template_name = template_name
         self.template = template
         self.xlsx_rows_list = rows_list
-        if 'email' not in bold_columns:
-            bold_columns.append('email')
-        self.info_cols = bold_columns
+        if 'email' not in preview_columns:
+            preview_columns.append('email')
+        self.info_cols = preview_columns
         self.pushButton_ask_and_send.setEnabled(True)
 
     def update_preview_and_attaches_list(self, item):
         for i in range(self.listWidget_emails.count()):
             if self.listWidget_emails.item(i) == item:
                 xlsx_row = self.xlsx_rows_list[i]
-                self.textBrowser.setText(self.template.format(**xlsx_row))
+                self.textBrowser.setText('<h2>{}</h2><hr>\n'.format(xlsx_row['subject'])
+                                         + self.template.format(**xlsx_row))
                 self.listWidget_attachments.clear()
                 self.listWidget_attachments.addItems(xlsx_row['attach_list'])
                 break
@@ -609,11 +612,11 @@ class Extended_GUI(Ui_MainWindow, QObject):
             keyring.set_password(KEYRING_SERVICE, LAST_SAVEFLAG, last_saveflag)
             keyring.set_password(KEYRING_SERVICE, LAST_PASSWORD, last_password if last_saveflag else '')
             envelope = EmailEnvelope(smtp_server=last_mailserver,
-                                             login=last_frommail,
-                                             password=last_password,
-                                             sender_addr=last_frommail,
-                                             sender_name=last_fromname,
-                                             copy_addrs=re.findall(EMAIL_REGEX, last_copylist))
+                                                 login=last_frommail,
+                                                 password=last_password,
+                                                 sender_addr=last_frommail,
+                                                 sender_name=last_fromname,
+                                                 copy_addrs=re.findall(EMAIL_REGEX, last_copylist))
             envelope.verify_credentials()
             return envelope
         else:
