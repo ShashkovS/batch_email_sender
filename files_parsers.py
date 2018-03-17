@@ -21,7 +21,7 @@ def rtv_table(xls_name):
         title = str(cell.value)
         if title:
             columns.append(title) # cell.column
-            if cell.font.bold:
+            if cell and cell.font.bold:
                 preview_columns.append(title)
     row_dict = {title: '' for title in columns}
     if 'email' not in row_dict:
