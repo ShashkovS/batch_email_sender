@@ -16,24 +16,24 @@ if not all(importlib.util.find_spec(name) for name in modules_to_check):
 
 
 # All imports
-import subprocess
-from email.mime.application import MIMEApplication
-import traceback
-from os.path import basename
 from typing import List
-from PyQt5 import QtCore, QtWidgets
-from email.utils import COMMASPACE, formatdate, formataddr
-import re
-import smtplib
-from PyQt5.Qt import *
-import openpyxl
-from email.mime.text import MIMEText
 from email.header import Header
-import os
-from email.mime.multipart import MIMEMultipart
 import sys
-import queue
+from email.mime.multipart import MIMEMultipart
+from email.utils import COMMASPACE, formatdate, formataddr
 import keyring
+from os.path import basename
+from PyQt5.Qt import *
+from PyQt5 import QtCore, QtWidgets
+import traceback
+import re
+from email.mime.application import MIMEApplication
+import openpyxl
+import queue
+import smtplib
+import subprocess
+from email.mime.text import MIMEText
+import os
 
 
 
@@ -58,7 +58,7 @@ def rtv_table(xls_name):
         title = str(cell.value)
         if title:
             columns.append(title) # cell.column
-            if cell and cell.font.bold:
+            if cell and cell.font and cell.font.bold:
                 preview_columns.append(title)
     row_dict = {title: '' for title in columns}
     if 'email' not in row_dict:
