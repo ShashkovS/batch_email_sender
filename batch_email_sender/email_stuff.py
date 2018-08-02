@@ -78,7 +78,7 @@ class EmailEnvelope:
             raise StopIteration
         self.connect_to_server()
         if self.__abort:
-            return mail
+            raise StopIteration
         self.smtp.sendmail(from_addr=mail['from_addr'], to_addrs=mail['to_addrs'], msg=mail['msg'])
         return mail
 
