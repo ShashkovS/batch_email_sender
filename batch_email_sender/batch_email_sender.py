@@ -6,7 +6,9 @@ import os
 import subprocess
 import re
 import keyring
-from PyQt5.Qt import *
+from PySide2.QtCore import *
+from PySide2.QtGui import QBrush, QColor
+from PySide2.QtWidgets import QMessageBox, QListWidgetItem, QFileDialog, QDialog, QApplication, QMainWindow
 
 import files_parsers
 import ui_email_and_passw
@@ -34,10 +36,10 @@ EMAIL_REGEX = r"\s*([a-zA-Z0-9'_][a-zA-Z0-9'._+-]{,63}@[a-zA-Z0-9.-]{,254}[a-zA-
 
 
 class Worker(QObject):
-    sig_step = pyqtSignal(int, str)  # worker id, step description: emitted every step through work() loop
-    sig_done = pyqtSignal(int)  # worker id: emitted at end of work()
-    sig_mail_sent = pyqtSignal(int, int)
-    sig_mail_error = pyqtSignal(int)
+    sig_step = Signal(int, str)  # worker id, step description: emitted every step through work() loop
+    sig_done = Signal(int)  # worker id: emitted at end of work()
+    sig_mail_sent = Signal(int, int)
+    sig_mail_error = Signal(int)
 
     def __init__(self, id: int, envelope):
         super().__init__()
@@ -45,7 +47,7 @@ class Worker(QObject):
         self.__abort = False
         self.envelope = envelope
 
-    @pyqtSlot()
+    @Slot()
     def work(self):
         """
         Pretend this worker method does work that takes a long time. During this time, the thread's
@@ -54,8 +56,7 @@ class Worker(QObject):
         received from GUI (such as abort).
         """
         thread_name = QThread.currentThread().objectName()
-        thread_id = int(QThread.currentThreadId())  # cast to int() is necessary
-        self.sig_step.emit(self.__id, 'Running worker #{} from thread "{}" (#{})'.format(self.__id, thread_name, thread_id))
+        self.sig_step.emit(self.__id, 'Running worker #{} from thread "{}"'.format(self.__id, thread_name))
 
         while True:
             batch_sender_app.processEvents()  # this could cause change to self.__abort
@@ -84,7 +85,7 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
     NUM_THREADS = 5
     USE_THREADS = None
 
-    sig_abort_workers = pyqtSignal()
+    sig_abort_workers = Signal()
 
     def __init__(self, mainw):
         super().__init__()
@@ -100,11 +101,11 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
         self.__workers_done = None
         self.__threads = None
 
-    @pyqtSlot(int, str)
+    @Slot(int, str)
     def on_worker_step(self, worker_id: int, data: str):
         self.statusbar.showMessage('Worker #{}: {}'.format(worker_id, data))
 
-    @pyqtSlot(int, int)
+    @Slot(int, int)
     def on_mail_sent(self, mail_widget_row_num: int, xls_row_number_ok: int):
         item = self.listWidget_emails.item(mail_widget_row_num)
         item.setBackground(QBrush(QColor("lightGreen")))  # Вах!
@@ -114,12 +115,12 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
         except Exception as e:
             print(e)
 
-    @pyqtSlot(int)
+    @Slot(int)
     def on_mail_error(self, mail_widget_row_num: int):
         item = self.listWidget_emails.item(mail_widget_row_num)
         item.setBackground(QBrush(QColor("lightRed")))  # Вах!
 
-    @pyqtSlot(int)
+    @Slot(int)
     def on_worker_done(self, worker_id):
         self.statusbar.showMessage('worker #{} done'.format(worker_id))
         self.__workers_done += 1
@@ -130,7 +131,7 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
             self.pushButton_cancel_send.setDisabled(True)
             QMessageBox.information(self.parent, 'OK', 'Все письма успешно отправлены!')
 
-    @pyqtSlot()
+    @Slot()
     def abort_workers(self):
         self.sig_abort_workers.emit()
         self.statusbar.showMessage('Asking each worker to abort')

@@ -2,7 +2,7 @@
 import importlib.util
 
 modules_to_check = [
-    'PyQt5',
+    'pyside2',
     'openpyxl',
     'keyring'
 ]
