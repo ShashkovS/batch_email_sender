@@ -8,6 +8,7 @@ from email.header import Header
 from os.path import basename
 from typing import List
 
+
 class EmailEnvelope:
     def __init__(self, smtp_server, login, password, sender_addr, sender_name='', copy_addrs=None):
         """Сохраняем всем параметры в атрибутах. Больше ничего не делаем"""
@@ -84,7 +85,6 @@ class EmailEnvelope:
 
     def copy(self):
         return self.__copy__()
-
 
 # password = input('Password?:\n')
 # sender = EmailEnvelope(smtp_server='smtp.googlemail.com', login='shashkov@179.ru', password=password,

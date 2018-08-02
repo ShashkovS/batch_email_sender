@@ -5,6 +5,7 @@ from PyQt5 import QtCore, QtWidgets
 class Ui_MainWindow(object):
     def __init__(self):
         super().__init__()
+
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
         MainWindow.resize(691, 662)
@@ -67,5 +68,5 @@ class Ui_MainWindow(object):
         self.pushButton_ask_and_send.setDisabled(True)
         self.pushButton_cancel_send.setText(_translate("MainWindow", "Отмена"))
         self.pushButton_cancel_send.setDisabled(True)
-        self.pushButton_open_list_and_template.setText(_translate("MainWindow", "(1) Открыть *list.xlsx или ***text.html"))
-
+        self.pushButton_open_list_and_template.setText(
+            _translate("MainWindow", "(1) Открыть *list.xlsx или ***text.html"))

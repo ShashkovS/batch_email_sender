@@ -16,24 +16,24 @@ if not all(importlib.util.find_spec(name) for name in modules_to_check):
 
 
 # All imports
-from typing import List
-from email.header import Header
-import sys
-from email.mime.multipart import MIMEMultipart
-from email.utils import COMMASPACE, formatdate, formataddr
-import keyring
+import subprocess
 from os.path import basename
-from PyQt5.Qt import *
+from email.header import Header
+import queue
 from PyQt5 import QtCore, QtWidgets
+from PyQt5.Qt import *
+from email.mime.multipart import MIMEMultipart
+import os
 import traceback
 import re
-from email.mime.application import MIMEApplication
-import openpyxl
-import queue
 import smtplib
-import subprocess
+from email.mime.application import MIMEApplication
+from typing import List
+import openpyxl
 from email.mime.text import MIMEText
-import os
+from email.utils import COMMASPACE, formatdate, formataddr
+import sys
+import keyring
 
 
 
@@ -138,6 +138,7 @@ def rtv_table_and_template(xls_name, template_name):
 
 ###### email_stuff ######
 
+
 class EmailEnvelope:
     def __init__(self, smtp_server, login, password, sender_addr, sender_name='', copy_addrs=None):
         """Сохраняем всем параметры в атрибутах. Больше ничего не делаем"""
@@ -214,7 +215,6 @@ class EmailEnvelope:
 
     def copy(self):
         return self.__copy__()
-
 
 
 
@@ -300,6 +300,7 @@ class Ui_Dialog(object):
 class Ui_MainWindow(object):
     def __init__(self):
         super().__init__()
+
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
         MainWindow.resize(691, 662)
@@ -362,8 +363,8 @@ class Ui_MainWindow(object):
         self.pushButton_ask_and_send.setDisabled(True)
         self.pushButton_cancel_send.setText(_translate("MainWindow", "Отмена"))
         self.pushButton_cancel_send.setDisabled(True)
-        self.pushButton_open_list_and_template.setText(_translate("MainWindow", "(1) Открыть *list.xlsx или ***text.html"))
-
+        self.pushButton_open_list_and_template.setText(
+            _translate("MainWindow", "(1) Открыть *list.xlsx или ***text.html"))
 
 
 ###### batch_email_sender ######
@@ -374,8 +375,8 @@ class Ui_MainWindow(object):
 def excepthook(excType, excValue, tracebackobj):
     traceback.print_tb(tracebackobj, excType, excValue)
 
-sys.excepthook = excepthook
 
+sys.excepthook = excepthook
 
 KEYRING_SERVICE = "batch_email_sender"
 LAST_FROMMAIL = "pSxx7tJyvgz2tk"
@@ -386,7 +387,6 @@ LAST_SAVEFLAG = "8AN43xqzGhZHUa"
 LAST_PASSWORD = "uLkTjXd6BWa4tw"
 
 EMAIL_REGEX = r"\s*([a-zA-Z0-9'_][a-zA-Z0-9'._+-]{,63}@[a-zA-Z0-9.-]{,254}[a-zA-Z0-9])\s*"
-
 
 
 class Worker(QObject):
@@ -411,7 +411,8 @@ class Worker(QObject):
         """
         thread_name = QThread.currentThread().objectName()
         thread_id = int(QThread.currentThreadId())  # cast to int() is necessary
-        self.sig_step.emit(self.__id, 'Running worker #{} from thread "{}" (#{})'.format(self.__id, thread_name, thread_id))
+        self.sig_step.emit(self.__id,
+                           'Running worker #{} from thread "{}" (#{})'.format(self.__id, thread_name, thread_id))
 
         while True:
             batch_sender_app.processEvents()  # this could cause change to self.__abort
@@ -421,7 +422,8 @@ class Worker(QObject):
             qt_mail_id, xls_mail_id = -1, -1
             try:
                 mail = self.envelope.send_next()
-                qt_mail_id, xls_mail_id, sent_to = mail['qt_id'], mail['xls_id'], mail['to_addrs']  # TODO здесь что-то грязно
+                qt_mail_id, xls_mail_id, sent_to = mail['qt_id'], mail['xls_id'], mail[
+                    'to_addrs']  # TODO здесь что-то грязно
             except StopIteration:
                 break  # Это — победа
             except Exception as e:
@@ -450,10 +452,10 @@ class Extended_GUI(Ui_MainWindow, QObject):
         self.xlsx_rows_list = ''
         self.parent = mainw
         self.pushButton_open_list_and_template.clicked.connect(self.open_xls_and_template)
-        self.pushButton_ask_and_send.clicked.connect(self.send_msg) # так нельзя! все же после каждого нажатия
-                                                                    # (даже после отмены ввода в диалоге) будет
-                                                                    # выполняться отправка  писем
-                                                                    # TODO: внять в логику программы (мне) и пофиксить багу
+        self.pushButton_ask_and_send.clicked.connect(self.send_msg)  # так нельзя! все же после каждого нажатия
+        # (даже после отмены ввода в диалоге) будет
+        # выполняться отправка  писем
+        # TODO: внять в логику программы (мне) и пофиксить багу
         self.pushButton_cancel_send.clicked.connect(self.abort_workers)
         QThread.currentThread().setObjectName('main')  # threads can be named, useful for log output
         self.__workers_done = None
@@ -629,7 +631,8 @@ class Extended_GUI(Ui_MainWindow, QObject):
             if item.checkState():
                 item.setSelected(True)
                 xlsx_row = item.xlsx_row
-                xlsx_row['QListWidgetIndex_WcCRve89'] = i  # Сохраняем номер строки, чтобы потом легко пометить её зелёным
+                xlsx_row[
+                    'QListWidgetIndex_WcCRve89'] = i  # Сохраняем номер строки, чтобы потом легко пометить её зелёным
                 mails_to_send.append(item.xlsx_row)
         if not mails_to_send:
             msg = 'Ни одно письмо для отправки не выбрано'
@@ -673,11 +676,11 @@ class Extended_GUI(Ui_MainWindow, QObject):
             thread.started.connect(worker.work)
             thread.start()  # this will emit 'started' and start thread's event loop
 
-
     def send_msg(self):
         # Перед отправкой должен быть закружен шаблон и список
         if not self.xlsx_rows_list or not self.template:
-            QMessageBox.warning(self.listWidget_emails.parent(), 'Ошибка', 'Сначала нужно открыть шаблон и список рассылки')
+            QMessageBox.warning(self.listWidget_emails.parent(), 'Ошибка',
+                                'Сначала нужно открыть шаблон и список рассылки')
             raise Exception()
 
         self.envelope = None

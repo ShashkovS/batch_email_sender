@@ -1,11 +1,13 @@
 import openpyxl
 import os
 import re
+
 ONE_PLUS_ONE_FOR_HEADER = 2
 OK_COLUMN = 1
 OKOK = 'ok'
 ORIGINAL_ROW_NUM = 'row_num_WcCRve89'
 EMAIL_REGEX = r"\s*([a-zA-Z0-9'_][a-zA-Z0-9'._+-]{,63}@[a-zA-Z0-9.-]{,254}[a-zA-Z0-9])\s*"
+
 
 def rtv_table(xls_name):
     try:
@@ -20,7 +22,7 @@ def rtv_table(xls_name):
     for cell in next(row_iter):
         title = str(cell.value)
         if title:
-            columns.append(title) # cell.column
+            columns.append(title)  # cell.column
             if cell and cell.font and cell.font.bold:
                 preview_columns.append(title)
     row_dict = {title: '' for title in columns}
@@ -45,10 +47,11 @@ def set_ok(xls_name, row_num_real):
         except FileNotFoundError:
             raise Exception('Файл ' + xls_name + ' не найден')
         except PermissionError:
-            raise Exception('Файл ' + xls_name + ' заблокирован. Сохраните и закойте его. В него будут вноситься отметки об успешности отправки')
+            raise Exception(
+                'Файл ' + xls_name + ' заблокирован. Сохраните и закойте его. В него будут вноситься отметки об успешности отправки')
             # continue
     xl_sheet_names = xl_workbook.get_sheet_names()
-    xl_sheet = xl_workbook.get_sheet_by_name(xl_sheet_names[0])
+    xl_sheet = xl_workbook[xl_sheet_names[0]]
     xl_sheet.cell(row=row_num_real, column=OK_COLUMN).value = OKOK
     xl_workbook.save(filename=xls_name)
 
@@ -90,7 +93,7 @@ def rtv_table_and_template(xls_name, template_name):
             attach_name = row[attach_key]
             if attach_name and not os.path.isfile(attach_name):
                 raise Exception('В таблице ' + xls_name + ' в строчке ' +
-                                str(rn+ONE_PLUS_ONE_FOR_HEADER) + ' в столбце ' + attach_key
+                                str(rn + ONE_PLUS_ONE_FOR_HEADER) + ' в столбце ' + attach_key
                                 + ' указано вложение "' + attach_name + '". Этот файл не найден')
             row['attach_list'].append(attach_name)
     # Проверили, что всё работает. Проверили, что вложения существуют
