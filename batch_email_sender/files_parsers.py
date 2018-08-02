@@ -47,8 +47,8 @@ def set_ok(xls_name, row_num_real):
         except FileNotFoundError:
             raise Exception('Файл ' + xls_name + ' не найден')
         except PermissionError:
-            raise Exception(
-                'Файл ' + xls_name + ' заблокирован. Сохраните и закойте его. В него будут вноситься отметки об успешности отправки')
+            raise Exception('Файл ' + xls_name + ' заблокирован. ' 
+                            'Сохраните и закойте его. В него будут вноситься отметки об успешности отправки')
             # continue
     xl_sheet_names = xl_workbook.get_sheet_names()
     xl_sheet = xl_workbook[xl_sheet_names[0]]

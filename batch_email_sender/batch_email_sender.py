@@ -1,12 +1,17 @@
-import ensure_modules
-
 import sys
 import traceback
 import os
 import subprocess
 import re
 import keyring
-from PyQt5.Qt import *
+from PySide2.QtCore import QObject, QThread, Qt, Signal, Slot
+from PySide2.QtGui import QBrush, QColor
+from PySide2.QtWidgets import QMessageBox, QListWidgetItem, QFileDialog, QDialog, QApplication, QMainWindow
+# from PyQt5.QtCore import QObject, QThread, Qt
+# from PyQt5.QtCore import pyqtSignal as Signal
+# from PyQt5.QtCore import pyqtSlot as Slot
+# from PyQt5.QtGui import QBrush, QColor
+# from PyQt5.QtWidgets import QMessageBox, QListWidgetItem, QFileDialog, QDialog, QApplication, QMainWindow
 
 import files_parsers
 import ui_email_and_passw
@@ -14,11 +19,11 @@ import ui_main_window
 import email_stuff
 
 
-def excepthook(excType, excValue, tracebackobj):
-    traceback.print_tb(tracebackobj, excType, excValue)
+def excepthook(exc_type, exc_value, traceback_obj):
+    traceback.print_tb(traceback_obj, exc_type, exc_value)
+
 
 sys.excepthook = excepthook
-
 
 KEYRING_SERVICE = "batch_email_sender"
 # Ключи, под которыми будут храниться данные
@@ -32,12 +37,11 @@ LAST_PASSWORD = "uLkTjXd6BWa4tw"
 EMAIL_REGEX = r"\s*([a-zA-Z0-9'_][a-zA-Z0-9'._+-]{,63}@[a-zA-Z0-9.-]{,254}[a-zA-Z0-9])\s*"
 
 
-
 class Worker(QObject):
-    sig_step = pyqtSignal(int, str)  # worker id, step description: emitted every step through work() loop
-    sig_done = pyqtSignal(int)  # worker id: emitted at end of work()
-    sig_mail_sent = pyqtSignal(int, int)
-    sig_mail_error = pyqtSignal(int)
+    sig_step = Signal(int, str)  # worker id, step description: emitted every step through work() loop
+    sig_done = Signal(int)  # worker id: emitted at end of work()
+    sig_mail_sent = Signal(int, int)
+    sig_mail_error = Signal(int)
 
     def __init__(self, id: int, envelope):
         super().__init__()
@@ -45,7 +49,7 @@ class Worker(QObject):
         self.__abort = False
         self.envelope = envelope
 
-    @pyqtSlot()
+    @Slot()
     def work(self):
         """
         Pretend this worker method does work that takes a long time. During this time, the thread's
@@ -54,8 +58,7 @@ class Worker(QObject):
         received from GUI (such as abort).
         """
         thread_name = QThread.currentThread().objectName()
-        thread_id = int(QThread.currentThreadId())  # cast to int() is necessary
-        self.sig_step.emit(self.__id, 'Running worker #{} from thread "{}" (#{})'.format(self.__id, thread_name, thread_id))
+        self.sig_step.emit(self.__id, 'Running worker #{} from thread "{}"'.format(self.__id, thread_name))
 
         while True:
             batch_sender_app.processEvents()  # this could cause change to self.__abort
@@ -65,7 +68,8 @@ class Worker(QObject):
             qt_mail_id, xls_mail_id = -1, -1
             try:
                 mail = self.envelope.send_next()
-                qt_mail_id, xls_mail_id, sent_to = mail['qt_id'], mail['xls_id'], mail['to_addrs']  # TODO здесь что-то грязно
+                qt_mail_id, xls_mail_id, sent_to = mail['qt_id'], mail['xls_id'], mail[
+                    'to_addrs']  # TODO здесь что-то грязно
             except StopIteration:
                 break  # Это — победа
             except Exception as e:
@@ -84,7 +88,7 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
     NUM_THREADS = 5
     USE_THREADS = None
 
-    sig_abort_workers = pyqtSignal()
+    sig_abort_workers = Signal()
 
     def __init__(self, mainw):
         super().__init__()
@@ -100,26 +104,26 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
         self.__workers_done = None
         self.__threads = None
 
-    @pyqtSlot(int, str)
+    @Slot(int, str)
     def on_worker_step(self, worker_id: int, data: str):
         self.statusbar.showMessage('Worker #{}: {}'.format(worker_id, data))
 
-    @pyqtSlot(int, int)
+    @Slot(int, int)
     def on_mail_sent(self, mail_widget_row_num: int, xls_row_number_ok: int):
         item = self.listWidget_emails.item(mail_widget_row_num)
         item.setBackground(QBrush(QColor("lightGreen")))  # Вах!
-        item.setCheckState(False)
+        item.setCheckState(Qt.Unchecked)
         try:
             files_parsers.set_ok(self.xls_name, xls_row_number_ok)
         except Exception as e:
             print(e)
 
-    @pyqtSlot(int)
+    @Slot(int)
     def on_mail_error(self, mail_widget_row_num: int):
         item = self.listWidget_emails.item(mail_widget_row_num)
         item.setBackground(QBrush(QColor("lightRed")))  # Вах!
 
-    @pyqtSlot(int)
+    @Slot(int)
     def on_worker_done(self, worker_id):
         self.statusbar.showMessage('worker #{} done'.format(worker_id))
         self.__workers_done += 1
@@ -130,7 +134,7 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
             self.pushButton_cancel_send.setDisabled(True)
             QMessageBox.information(self.parent, 'OK', 'Все письма успешно отправлены!')
 
-    @pyqtSlot()
+    @Slot()
     def abort_workers(self):
         self.sig_abort_workers.emit()
         self.statusbar.showMessage('Asking each worker to abort')
@@ -160,7 +164,7 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
         self.template = None
         self.xlsx_rows_list = None
         self.pushButton_ask_and_send.setDisabled(True)
-        #filename = filename.lower()
+        # filename = filename.lower()
         if filename.endswith('list.xlsx'):
             xls_name = filename
             template_name = filename.replace('list.xlsx', 'text.html')
@@ -181,7 +185,7 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
 
     def update_preview_and_attaches_list(self, item):
         for i in range(self.listWidget_emails.count()):
-            if self.listWidget_emails.item(i) == item:
+            if self.listWidget_emails.item(i) is item:
                 xlsx_row = self.xlsx_rows_list[i]
                 self.textBrowser.setText('<h2>{}</h2><hr>\n'.format(xlsx_row['subject'])
                                          + self.template.format(**xlsx_row))
@@ -199,7 +203,7 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
             item.xlsx_row = xlsx_row  # Именно отсюда мы возьмём данные для отправки
             item.setCheckState(Qt.Checked)
             if xlsx_row[files_parsers.OKOK] == files_parsers.OKOK:
-                item.setCheckState(False)
+                item.setCheckState(Qt.Unchecked)
                 item.setBackground(QBrush(QColor("lightGreen")))  # Вах!
             self.listWidget_emails.addItem(item)
         self.listWidget_emails.itemClicked.connect(self.update_preview_and_attaches_list)
@@ -209,7 +213,9 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
     def open_xls_and_template(self):
         filename, _ = QFileDialog.getOpenFileName(caption='Выберите список или шаблон', directory='',
                                                   options=QFileDialog.Options(),
-                                                  filter="Список или шаблон (*list.xlsx *text.html);;Список (*list.xlsx);;Шаблон (*text.html);;All Files (*)")
+                                                  filter="Список или шаблон (*list.xlsx *text.html);;"
+                                                         "Список (*list.xlsx);;" 
+                                                         "Шаблон (*text.html);;All Files (*)")
         if not filename:
             return
         self.listWidget_emails.clear()
@@ -238,7 +244,7 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
         diagui.line_sender.setText(last_fromname or '')
         diagui.line_smtpserver.setText(last_mailserver or 'smtp.googlemail.com')
         diagui.line_send_copy.setText(last_copylist or '')
-        diagui.save_passw_cb.setCheckState(bool(last_saveflag))
+        diagui.save_passw_cb.setCheckState([Qt.Unchecked, Qt.Checked][bool(last_saveflag)])
         if loginf.exec_() == QDialog.Accepted:
             last_frommail = diagui.line_email.text()
             last_password = diagui.line_password.text()
@@ -270,7 +276,8 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
             if item.checkState():
                 item.setSelected(True)
                 xlsx_row = item.xlsx_row
-                xlsx_row['QListWidgetIndex_WcCRve89'] = i  # Сохраняем номер строки, чтобы потом легко пометить её зелёным
+                # Сохраняем номер строки, чтобы потом легко пометить её зелёным
+                xlsx_row['QListWidgetIndex_WcCRve89'] = i
                 mails_to_send.append(item.xlsx_row)
         if not mails_to_send:
             msg = 'Ни одно письмо для отправки не выбрано'
@@ -314,11 +321,11 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
             thread.started.connect(worker.work)
             thread.start()  # this will emit 'started' and start thread's event loop
 
-
     def send_msg(self):
         # Перед отправкой должен быть закружен шаблон и список
         if not self.xlsx_rows_list or not self.template:
-            QMessageBox.warning(self.listWidget_emails.parent(), 'Ошибка', 'Сначала нужно открыть шаблон и список рассылки')
+            QMessageBox.warning(self.listWidget_emails.parent(), 'Ошибка',
+                                'Сначала нужно открыть шаблон и список рассылки')
             raise Exception()
 
         self.envelope = None
