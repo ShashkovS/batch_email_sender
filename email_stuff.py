@@ -19,6 +19,7 @@ class EmailEnvelope:
         self.copy_addrs = copy_addrs or []
         self.smtp = None
         self.send_queue = queue.Queue()
+        self.__abort = False
 
     def connect_to_server(self):
         """Подключаемся к серверу"""
@@ -75,6 +76,8 @@ class EmailEnvelope:
         except queue.Empty as e:
             raise StopIteration
         self.connect_to_server()
+        if self.__abort:
+            return mail
         self.smtp.sendmail(from_addr=mail['from_addr'], to_addrs=mail['to_addrs'], msg=mail['msg'])
         return mail
 
