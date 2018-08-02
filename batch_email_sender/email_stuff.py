@@ -65,10 +65,13 @@ class EmailEnvelope:
                     Name=basename(f)
                 )
             # After the file is closed
-            part['Content-Disposition'] = 'attachment; filename="%s"' % basename(f)
+            part['Content-Disposition'] = 'attachment; filename="{}"'.format(basename(f))
             msg.attach(part)
-        mail = dict(from_addr=self.sender_addr, to_addrs=recipients + self.copy_addrs, msg=msg.as_string(),
-                    xls_id=xls_id, qt_id=qt_id)
+        mail = dict(from_addr=self.sender_addr,
+                    to_addrs=recipients + self.copy_addrs,
+                    msg=msg.as_string(),
+                    xls_id=xls_id,
+                    qt_id=qt_id)
         self.send_queue.put(mail)
 
     def send_next(self):

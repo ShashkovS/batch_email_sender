@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from PySide2 import QtCore, QtWidgets
+# from PyQt5 import QtCore, QtWidgets
 
 
 class Ui_MainWindow(object):
