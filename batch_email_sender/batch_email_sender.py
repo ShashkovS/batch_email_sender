@@ -150,7 +150,7 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
 
     def show_email_attach(self, item):
         for i in range(self.listWidget_attachments.count()):
-            if self.listWidget_attachments.item(i) == item and self.listWidget_attachments.item(i).text():
+            if self.listWidget_attachments.item(i) is item and self.listWidget_attachments.item(i).text():
                 if sys.platform.startswith('darwin'):
                     subprocess.call(('open', item.text()))
                 elif os.name == 'nt':
