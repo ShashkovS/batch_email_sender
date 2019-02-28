@@ -50,7 +50,7 @@ def set_ok(xls_name, row_num_real):
             raise Exception('Файл ' + xls_name + ' заблокирован. ' 
                             'Сохраните и закойте его. В него будут вноситься отметки об успешности отправки')
             # continue
-    xl_sheet_names = xl_workbook.get_sheet_names()
+    xl_sheet_names = xl_workbook.sheetnames
     xl_sheet = xl_workbook[xl_sheet_names[0]]
     xl_sheet.cell(row=row_num_real, column=OK_COLUMN).value = OKOK
     xl_workbook.save(filename=xls_name)
