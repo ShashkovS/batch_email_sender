@@ -1,4 +1,5 @@
 import smtplib
+import ssl
 import queue
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
@@ -21,12 +22,15 @@ class EmailEnvelope:
         self.smtp = None
         self.send_queue = queue.Queue()
         self.__abort = False
+        self.context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
 
     def connect_to_server(self):
         """Подключаемся к серверу"""
         if self.smtp is None:
-            self.smtp = smtplib.SMTP()
+            self.smtp = smtplib.SMTP_SSL(self.smtp_server, port=465)
             # self.smtp.set_debuglevel(1)
+            self.smtp.ehlo_or_helo_if_needed()
+            self.smtp.login(self.login, self.password)
         # Проверяем подключение
         try:
             status = self.smtp.noop()[0]
@@ -34,9 +38,10 @@ class EmailEnvelope:
             status = -1
         # Если не ОК, то переподключаемся
         if status != 250:
-            self.smtp.connect(host=self.smtp_server)
+            self.smtp.connect(host=self.smtp_server, port=587)
             self.smtp.ehlo_or_helo_if_needed()
-            self.smtp.starttls()
+            self.smtp.starttls(context=self.context)
+            self.smtp.ehlo_or_helo_if_needed()
             self.smtp.login(self.login, self.password)
 
     def verify_credentials(self):
@@ -74,15 +79,19 @@ class EmailEnvelope:
                     qt_id=qt_id)
         self.send_queue.put(mail)
 
-    def send_next(self):
+
+    def take_next_mail(self):
         try:
             mail = self.send_queue.get(block=False)
         except queue.Empty as e:
             raise StopIteration
+        return mail
+
+    def send_next(self, mail):
         self.connect_to_server()
         if self.__abort:
             raise StopIteration
-        self.smtp.sendmail(from_addr=mail['from_addr'], to_addrs=mail['to_addrs'], msg=mail['msg'])
+        senderrs = self.smtp.sendmail(from_addr=mail['from_addr'], to_addrs=mail['to_addrs'], msg=mail['msg'])
         return mail
 
     def __copy__(self):

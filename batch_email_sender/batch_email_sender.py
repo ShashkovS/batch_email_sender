@@ -41,7 +41,7 @@ class Worker(QObject):
     sig_step = Signal(int, str)  # worker id, step description: emitted every step through work() loop
     sig_done = Signal(int)  # worker id: emitted at end of work()
     sig_mail_sent = Signal(int, int)
-    sig_mail_error = Signal(int)
+    sig_mail_error = Signal(int, str)
 
     def __init__(self, id: int, envelope):
         super().__init__()
@@ -65,18 +65,21 @@ class Worker(QObject):
             if self.__abort:
                 self.sig_step.emit(self.__id, 'Worker #{} aborting work'.format(self.__id))
                 break
-            qt_mail_id, xls_mail_id = -1, -1
             try:
-                mail = self.envelope.send_next()
-                qt_mail_id, xls_mail_id, sent_to = mail['qt_id'], mail['xls_id'], mail[
-                    'to_addrs']  # TODO здесь что-то грязно
+                mail = self.envelope.take_next_mail()
+                qt_mail_id, xls_mail_id, sent_to = mail['qt_id'], mail['xls_id'], mail['to_addrs']
             except StopIteration:
                 break  # Это — победа
+            # Теперь пытаемся отправить полученное письмо
+            try:
+                self.envelope.send_next(mail)
             except Exception as e:
                 self.sig_step.emit(self.__id, 'Worker #{} error: {}'.format(self.__id, e))
-            if qt_mail_id >= 0:
+                self.sig_mail_error.emit(qt_mail_id, str(e))
+            else:
                 self.sig_step.emit(self.__id, 'Worker #{} sent to {}'.format(self.__id, sent_to))
                 self.sig_mail_sent.emit(qt_mail_id, xls_mail_id)
+
         self.sig_done.emit(self.__id)
 
     def abort(self):
@@ -86,8 +89,6 @@ class Worker(QObject):
 
 class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
     NUM_THREADS = 5
-    USE_THREADS = None
-
     sig_abort_workers = Signal()
 
     def __init__(self, mainw):
@@ -118,13 +119,14 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
         except Exception as e:
             print(e)
 
-    @Slot(int)
-    def on_mail_error(self, mail_widget_row_num: int):
+    @Slot(int, str)
+    def on_mail_error(self, mail_widget_row_num: int, msg: str):
         item = self.listWidget_emails.item(mail_widget_row_num)
-        item.setBackground(QBrush(QColor("lightRed")))  # Вах!
+        item.setBackground(QBrush(QColor("Red")))  # Вах!
+        QMessageBox.warning(self.listWidget_emails.parent(), 'Ошибка отправки', 'Не удалось отправить письмо: {}'.format(msg))
 
     @Slot(int)
-    def on_worker_done(self, worker_id):
+    def on_worker_done(self, worker_id: int):
         self.statusbar.showMessage('worker #{} done'.format(worker_id))
         self.__workers_done += 1
         if self.__workers_done == self.USE_THREADS:
@@ -132,7 +134,7 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
             self.pushButton_ask_and_send.setEnabled(True)
             self.pushButton_open_list_and_template.setEnabled(True)
             self.pushButton_cancel_send.setDisabled(True)
-            QMessageBox.information(self.parent, 'OK', 'Все письма успешно отправлены!')
+            QMessageBox.information(self.parent, 'OK', 'Все письма обработаны!')
 
     @Slot()
     def abort_workers(self):
@@ -150,7 +152,7 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
 
     def show_email_attach(self, item):
         for i in range(self.listWidget_attachments.count()):
-            if self.listWidget_attachments.item(i) == item and self.listWidget_attachments.item(i).text():
+            if self.listWidget_attachments.item(i) is item and self.listWidget_attachments.item(i).text():
                 if sys.platform.startswith('darwin'):
                     subprocess.call(('open', item.text()))
                 elif os.name == 'nt':

@@ -1,48 +1,38 @@
-# -*- coding: utf-8 -*-
-import importlib.util
-
-modules_to_check = [
-    'PyQt5',
-    'openpyxl',
-    'keyring'
-]
-
-if not all(importlib.util.find_spec(name) for name in modules_to_check):
-    import ensurepip
-    ensurepip.bootstrap(upgrade=False, user=True)
-    import pip
-    for name in modules_to_check:
-        pip.main(['install', "--user", name])
 
 
 # All imports
-import subprocess
-from os.path import basename
-from email.header import Header
+import openpyxl
+import ssl
+import sys
+from PySide2.QtWidgets import QMessageBox, QListWidgetItem, QFileDialog, QDialog, QApplication, QMainWindow
+from typing import List
+from PySide2.QtGui import QBrush, QColor
 import queue
-from PyQt5 import QtCore, QtWidgets
-from PyQt5.Qt import *
+import keyring
+from email.utils import COMMASPACE, formatdate, formataddr
+import re
+from PySide2 import QtCore, QtWidgets
+from os.path import basename
 from email.mime.multipart import MIMEMultipart
 import os
 import traceback
-import re
-import smtplib
+from email.header import Header
 from email.mime.application import MIMEApplication
-from typing import List
-import openpyxl
 from email.mime.text import MIMEText
-from email.utils import COMMASPACE, formatdate, formataddr
-import sys
-import keyring
+import smtplib
+import subprocess
+from PySide2.QtCore import QObject, QThread, Qt, Signal, Slot
 
 
 
 ###### files_parsers ######
+
 ONE_PLUS_ONE_FOR_HEADER = 2
 OK_COLUMN = 1
 OKOK = 'ok'
 ORIGINAL_ROW_NUM = 'row_num_WcCRve89'
 EMAIL_REGEX = r"\s*([a-zA-Z0-9'_][a-zA-Z0-9'._+-]{,63}@[a-zA-Z0-9.-]{,254}[a-zA-Z0-9])\s*"
+
 
 def rtv_table(xls_name):
     try:
@@ -57,7 +47,7 @@ def rtv_table(xls_name):
     for cell in next(row_iter):
         title = str(cell.value)
         if title:
-            columns.append(title) # cell.column
+            columns.append(title)  # cell.column
             if cell and cell.font and cell.font.bold:
                 preview_columns.append(title)
     row_dict = {title: '' for title in columns}
@@ -82,10 +72,11 @@ def set_ok(xls_name, row_num_real):
         except FileNotFoundError:
             raise Exception('Файл ' + xls_name + ' не найден')
         except PermissionError:
-            raise Exception('Файл ' + xls_name + ' заблокирован. Сохраните и закойте его. В него будут вноситься отметки об успешности отправки')
+            raise Exception('Файл ' + xls_name + ' заблокирован. ' 
+                            'Сохраните и закойте его. В него будут вноситься отметки об успешности отправки')
             # continue
-    xl_sheet_names = xl_workbook.get_sheet_names()
-    xl_sheet = xl_workbook.get_sheet_by_name(xl_sheet_names[0])
+    xl_sheet_names = xl_workbook.sheetnames
+    xl_sheet = xl_workbook[xl_sheet_names[0]]
     xl_sheet.cell(row=row_num_real, column=OK_COLUMN).value = OKOK
     xl_workbook.save(filename=xls_name)
 
@@ -127,7 +118,7 @@ def rtv_table_and_template(xls_name, template_name):
             attach_name = row[attach_key]
             if attach_name and not os.path.isfile(attach_name):
                 raise Exception('В таблице ' + xls_name + ' в строчке ' +
-                                str(rn+ONE_PLUS_ONE_FOR_HEADER) + ' в столбце ' + attach_key
+                                str(rn + ONE_PLUS_ONE_FOR_HEADER) + ' в столбце ' + attach_key
                                 + ' указано вложение "' + attach_name + '". Этот файл не найден')
             row['attach_list'].append(attach_name)
     # Проверили, что всё работает. Проверили, что вложения существуют
@@ -150,12 +141,16 @@ class EmailEnvelope:
         self.copy_addrs = copy_addrs or []
         self.smtp = None
         self.send_queue = queue.Queue()
+        self.__abort = False
+        self.context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
 
     def connect_to_server(self):
         """Подключаемся к серверу"""
         if self.smtp is None:
-            self.smtp = smtplib.SMTP()
+            self.smtp = smtplib.SMTP_SSL(self.smtp_server, port=465)
             # self.smtp.set_debuglevel(1)
+            self.smtp.ehlo_or_helo_if_needed()
+            self.smtp.login(self.login, self.password)
         # Проверяем подключение
         try:
             status = self.smtp.noop()[0]
@@ -163,9 +158,10 @@ class EmailEnvelope:
             status = -1
         # Если не ОК, то переподключаемся
         if status != 250:
-            self.smtp.connect(host=self.smtp_server)
+            self.smtp.connect(host=self.smtp_server, port=587)
             self.smtp.ehlo_or_helo_if_needed()
-            self.smtp.starttls()
+            self.smtp.starttls(context=self.context)
+            self.smtp.ehlo_or_helo_if_needed()
             self.smtp.login(self.login, self.password)
 
     def verify_credentials(self):
@@ -194,19 +190,28 @@ class EmailEnvelope:
                     Name=basename(f)
                 )
             # After the file is closed
-            part['Content-Disposition'] = 'attachment; filename="%s"' % basename(f)
+            part['Content-Disposition'] = 'attachment; filename="{}"'.format(basename(f))
             msg.attach(part)
-        mail = dict(from_addr=self.sender_addr, to_addrs=recipients + self.copy_addrs, msg=msg.as_string(),
-                    xls_id=xls_id, qt_id=qt_id)
+        mail = dict(from_addr=self.sender_addr,
+                    to_addrs=recipients + self.copy_addrs,
+                    msg=msg.as_string(),
+                    xls_id=xls_id,
+                    qt_id=qt_id)
         self.send_queue.put(mail)
 
-    def send_next(self):
+
+    def take_next_mail(self):
         try:
             mail = self.send_queue.get(block=False)
         except queue.Empty as e:
             raise StopIteration
+        return mail
+
+    def send_next(self, mail):
         self.connect_to_server()
-        self.smtp.sendmail(from_addr=mail['from_addr'], to_addrs=mail['to_addrs'], msg=mail['msg'])
+        if self.__abort:
+            raise StopIteration
+        senderrs = self.smtp.sendmail(from_addr=mail['from_addr'], to_addrs=mail['to_addrs'], msg=mail['msg'])
         return mail
 
     def __copy__(self):
@@ -219,6 +224,7 @@ class EmailEnvelope:
 
 
 ###### ui_email_and_passw ######
+
 
 class Ui_Dialog(object):
     def setupUi(self, Dialog):
@@ -262,7 +268,6 @@ class Ui_Dialog(object):
         self.line_send_copy.setObjectName("line_send_copy")
         self.formLayout.setWidget(4, QtWidgets.QFormLayout.FieldRole, self.line_send_copy)
 
-
         self.label_6 = QtWidgets.QLabel(Dialog)
         self.label_6.setObjectName("label_6")
         self.formLayout.setWidget(5, QtWidgets.QFormLayout.LabelRole, self.label_6)
@@ -274,7 +279,7 @@ class Ui_Dialog(object):
         self.gridLayout.addLayout(self.formLayout, 0, 0, 1, 1)
         self.buttonBox = QtWidgets.QDialogButtonBox(Dialog)
         self.buttonBox.setOrientation(QtCore.Qt.Horizontal)
-        self.buttonBox.setStandardButtons(QtWidgets.QDialogButtonBox.Cancel|QtWidgets.QDialogButtonBox.Ok)
+        self.buttonBox.setStandardButtons(QtWidgets.QDialogButtonBox.Cancel | QtWidgets.QDialogButtonBox.Ok)
         self.buttonBox.setCenterButtons(True)
         self.buttonBox.setObjectName("buttonBox")
         self.gridLayout.addWidget(self.buttonBox, 1, 0, 1, 1)
@@ -371,9 +376,8 @@ class Ui_MainWindow(object):
 
 
 
-
-def excepthook(excType, excValue, tracebackobj):
-    traceback.print_tb(tracebackobj, excType, excValue)
+def excepthook(exc_type, exc_value, traceback_obj):
+    traceback.print_tb(traceback_obj, exc_type, exc_value)
 
 
 sys.excepthook = excepthook
@@ -390,10 +394,10 @@ EMAIL_REGEX = r"\s*([a-zA-Z0-9'_][a-zA-Z0-9'._+-]{,63}@[a-zA-Z0-9.-]{,254}[a-zA-
 
 
 class Worker(QObject):
-    sig_step = pyqtSignal(int, str)  # worker id, step description: emitted every step through work() loop
-    sig_done = pyqtSignal(int)  # worker id: emitted at end of work()
-    sig_mail_sent = pyqtSignal(int, int)
-    sig_mail_error = pyqtSignal(int)
+    sig_step = Signal(int, str)  # worker id, step description: emitted every step through work() loop
+    sig_done = Signal(int)  # worker id: emitted at end of work()
+    sig_mail_sent = Signal(int, int)
+    sig_mail_error = Signal(int, str)
 
     def __init__(self, id: int, envelope):
         super().__init__()
@@ -401,7 +405,7 @@ class Worker(QObject):
         self.__abort = False
         self.envelope = envelope
 
-    @pyqtSlot()
+    @Slot()
     def work(self):
         """
         Pretend this worker method does work that takes a long time. During this time, the thread's
@@ -410,27 +414,28 @@ class Worker(QObject):
         received from GUI (such as abort).
         """
         thread_name = QThread.currentThread().objectName()
-        thread_id = int(QThread.currentThreadId())  # cast to int() is necessary
-        self.sig_step.emit(self.__id,
-                           'Running worker #{} from thread "{}" (#{})'.format(self.__id, thread_name, thread_id))
+        self.sig_step.emit(self.__id, 'Running worker #{} from thread "{}"'.format(self.__id, thread_name))
 
         while True:
             batch_sender_app.processEvents()  # this could cause change to self.__abort
             if self.__abort:
                 self.sig_step.emit(self.__id, 'Worker #{} aborting work'.format(self.__id))
                 break
-            qt_mail_id, xls_mail_id = -1, -1
             try:
-                mail = self.envelope.send_next()
-                qt_mail_id, xls_mail_id, sent_to = mail['qt_id'], mail['xls_id'], mail[
-                    'to_addrs']  # TODO здесь что-то грязно
+                mail = self.envelope.take_next_mail()
+                qt_mail_id, xls_mail_id, sent_to = mail['qt_id'], mail['xls_id'], mail['to_addrs']
             except StopIteration:
                 break  # Это — победа
+            # Теперь пытаемся отправить полученное письмо
+            try:
+                self.envelope.send_next(mail)
             except Exception as e:
                 self.sig_step.emit(self.__id, 'Worker #{} error: {}'.format(self.__id, e))
-            if qt_mail_id >= 0:
+                self.sig_mail_error.emit(qt_mail_id, str(e))
+            else:
                 self.sig_step.emit(self.__id, 'Worker #{} sent to {}'.format(self.__id, sent_to))
                 self.sig_mail_sent.emit(qt_mail_id, xls_mail_id)
+
         self.sig_done.emit(self.__id)
 
     def abort(self):
@@ -440,9 +445,7 @@ class Worker(QObject):
 
 class Extended_GUI(Ui_MainWindow, QObject):
     NUM_THREADS = 5
-    USE_THREADS = None
-
-    sig_abort_workers = pyqtSignal()
+    sig_abort_workers = Signal()
 
     def __init__(self, mainw):
         super().__init__()
@@ -452,36 +455,34 @@ class Extended_GUI(Ui_MainWindow, QObject):
         self.xlsx_rows_list = ''
         self.parent = mainw
         self.pushButton_open_list_and_template.clicked.connect(self.open_xls_and_template)
-        self.pushButton_ask_and_send.clicked.connect(self.send_msg)  # так нельзя! все же после каждого нажатия
-        # (даже после отмены ввода в диалоге) будет
-        # выполняться отправка  писем
-        # TODO: внять в логику программы (мне) и пофиксить багу
+        self.pushButton_ask_and_send.clicked.connect(self.send_msg)
         self.pushButton_cancel_send.clicked.connect(self.abort_workers)
         QThread.currentThread().setObjectName('main')  # threads can be named, useful for log output
         self.__workers_done = None
         self.__threads = None
 
-    @pyqtSlot(int, str)
+    @Slot(int, str)
     def on_worker_step(self, worker_id: int, data: str):
         self.statusbar.showMessage('Worker #{}: {}'.format(worker_id, data))
 
-    @pyqtSlot(int, int)
+    @Slot(int, int)
     def on_mail_sent(self, mail_widget_row_num: int, xls_row_number_ok: int):
         item = self.listWidget_emails.item(mail_widget_row_num)
         item.setBackground(QBrush(QColor("lightGreen")))  # Вах!
-        item.setCheckState(False)
+        item.setCheckState(Qt.Unchecked)
         try:
             set_ok(self.xls_name, xls_row_number_ok)
         except Exception as e:
             print(e)
 
-    @pyqtSlot(int)
-    def on_mail_error(self, mail_widget_row_num: int):
+    @Slot(int, str)
+    def on_mail_error(self, mail_widget_row_num: int, msg: str):
         item = self.listWidget_emails.item(mail_widget_row_num)
-        item.setBackground(QBrush(QColor("lightRed")))  # Вах!
+        item.setBackground(QBrush(QColor("Red")))  # Вах!
+        QMessageBox.warning(self.listWidget_emails.parent(), 'Ошибка отправки', 'Не удалось отправить письмо: {}'.format(msg))
 
-    @pyqtSlot(int)
-    def on_worker_done(self, worker_id):
+    @Slot(int)
+    def on_worker_done(self, worker_id: int):
         self.statusbar.showMessage('worker #{} done'.format(worker_id))
         self.__workers_done += 1
         if self.__workers_done == self.USE_THREADS:
@@ -489,9 +490,9 @@ class Extended_GUI(Ui_MainWindow, QObject):
             self.pushButton_ask_and_send.setEnabled(True)
             self.pushButton_open_list_and_template.setEnabled(True)
             self.pushButton_cancel_send.setDisabled(True)
-            QMessageBox.information(self.parent, 'OK', 'Все письма успешно отправлены!')
+            QMessageBox.information(self.parent, 'OK', 'Все письма обработаны!')
 
-    @pyqtSlot()
+    @Slot()
     def abort_workers(self):
         self.sig_abort_workers.emit()
         self.statusbar.showMessage('Asking each worker to abort')
@@ -507,7 +508,7 @@ class Extended_GUI(Ui_MainWindow, QObject):
 
     def show_email_attach(self, item):
         for i in range(self.listWidget_attachments.count()):
-            if self.listWidget_attachments.item(i) == item and self.listWidget_attachments.item(i).text():
+            if self.listWidget_attachments.item(i) is item and self.listWidget_attachments.item(i).text():
                 if sys.platform.startswith('darwin'):
                     subprocess.call(('open', item.text()))
                 elif os.name == 'nt':
@@ -521,7 +522,7 @@ class Extended_GUI(Ui_MainWindow, QObject):
         self.template = None
         self.xlsx_rows_list = None
         self.pushButton_ask_and_send.setDisabled(True)
-        filename = filename.lower()
+        # filename = filename.lower()
         if filename.endswith('list.xlsx'):
             xls_name = filename
             template_name = filename.replace('list.xlsx', 'text.html')
@@ -542,7 +543,7 @@ class Extended_GUI(Ui_MainWindow, QObject):
 
     def update_preview_and_attaches_list(self, item):
         for i in range(self.listWidget_emails.count()):
-            if self.listWidget_emails.item(i) == item:
+            if self.listWidget_emails.item(i) is item:
                 xlsx_row = self.xlsx_rows_list[i]
                 self.textBrowser.setText('<h2>{}</h2><hr>\n'.format(xlsx_row['subject'])
                                          + self.template.format(**xlsx_row))
@@ -560,7 +561,7 @@ class Extended_GUI(Ui_MainWindow, QObject):
             item.xlsx_row = xlsx_row  # Именно отсюда мы возьмём данные для отправки
             item.setCheckState(Qt.Checked)
             if xlsx_row[OKOK] == OKOK:
-                item.setCheckState(False)
+                item.setCheckState(Qt.Unchecked)
                 item.setBackground(QBrush(QColor("lightGreen")))  # Вах!
             self.listWidget_emails.addItem(item)
         self.listWidget_emails.itemClicked.connect(self.update_preview_and_attaches_list)
@@ -570,7 +571,9 @@ class Extended_GUI(Ui_MainWindow, QObject):
     def open_xls_and_template(self):
         filename, _ = QFileDialog.getOpenFileName(caption='Выберите список или шаблон', directory='',
                                                   options=QFileDialog.Options(),
-                                                  filter="Список или шаблон (*list.xlsx *text.html);;Список (*list.xlsx);;Шаблон (*text.html);;All Files (*)")
+                                                  filter="Список или шаблон (*list.xlsx *text.html);;"
+                                                         "Список (*list.xlsx);;" 
+                                                         "Шаблон (*text.html);;All Files (*)")
         if not filename:
             return
         self.listWidget_emails.clear()
@@ -580,7 +583,7 @@ class Extended_GUI(Ui_MainWindow, QObject):
         try:
             self.read_list_and_template(filename)
         except Exception as e:
-            QMessageBox.information(self.parent, 'OK', 'Ошибка: ' + str(e))
+            QMessageBox.warning(self.parent, 'Error', 'Ошибка: ' + str(e))
         self.fill_widgets_with_emails()
 
     def ask_login_and_create_connection(self):
@@ -599,7 +602,7 @@ class Extended_GUI(Ui_MainWindow, QObject):
         diagui.line_sender.setText(last_fromname or '')
         diagui.line_smtpserver.setText(last_mailserver or 'smtp.googlemail.com')
         diagui.line_send_copy.setText(last_copylist or '')
-        diagui.save_passw_cb.setCheckState(bool(last_saveflag))
+        diagui.save_passw_cb.setCheckState([Qt.Unchecked, Qt.Checked][bool(last_saveflag)])
         if loginf.exec_() == QDialog.Accepted:
             last_frommail = diagui.line_email.text()
             last_password = diagui.line_password.text()
@@ -631,8 +634,8 @@ class Extended_GUI(Ui_MainWindow, QObject):
             if item.checkState():
                 item.setSelected(True)
                 xlsx_row = item.xlsx_row
-                xlsx_row[
-                    'QListWidgetIndex_WcCRve89'] = i  # Сохраняем номер строки, чтобы потом легко пометить её зелёным
+                # Сохраняем номер строки, чтобы потом легко пометить её зелёным
+                xlsx_row['QListWidgetIndex_WcCRve89'] = i
                 mails_to_send.append(item.xlsx_row)
         if not mails_to_send:
             msg = 'Ни одно письмо для отправки не выбрано'
