@@ -4,10 +4,14 @@ import queue
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
 from email.utils import COMMASPACE, formatdate, formataddr
 from email.header import Header
+from email import encoders
 from os.path import basename
 from typing import List
+# For guessing MIME type based on file name extension
+import mimetypes
 
 
 class EmailEnvelope:
@@ -61,16 +65,18 @@ class EmailEnvelope:
         msg['Date'] = formatdate(localtime=True)
         msg['Subject'] = Header(subject, 'utf-8')
         msg.attach(MIMEText(html.encode('utf-8'), 'html', 'utf-8'))
-        for f in files or []:
-            if not f:
+        for file in files or []:
+            if not file:
                 continue
-            with open(f, "rb") as fil:
-                part = MIMEApplication(
-                    fil.read(),
-                    Name=basename(f)
-                )
-            # After the file is closed
-            part['Content-Disposition'] = 'attachment; filename="{}"'.format(basename(f))
+            ctype, encoding = mimetypes.guess_type(file)
+            if ctype is None or encoding is not None:
+                ctype = 'application/octet-stream'
+            maintype, subtype = ctype.split('/', 1)
+            part = MIMEBase(maintype, subtype)
+            with open(file, "rb") as attachment_file:
+                part.set_payload(attachment_file.read())
+            part.add_header('Content-Disposition', 'attachment', filename=basename(file))
+            encoders.encode_base64(part)
             msg.attach(part)
         mail = dict(from_addr=self.sender_addr,
                     to_addrs=recipients + self.copy_addrs,

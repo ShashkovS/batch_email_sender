@@ -1,27 +1,30 @@
 
 
 # All imports
+import subprocess
 import openpyxl
-import ssl
-import sys
-from PySide2.QtWidgets import QMessageBox, QListWidgetItem, QFileDialog, QDialog, QApplication, QMainWindow
-from typing import List
-from PySide2.QtGui import QBrush, QColor
+import smtplib
 import queue
-import keyring
-from email.utils import COMMASPACE, formatdate, formataddr
-import re
-from PySide2 import QtCore, QtWidgets
-from os.path import basename
-from email.mime.multipart import MIMEMultipart
 import os
+import mimetypes
+from email.mime.text import MIMEText
+from PySide2.QtWidgets import QMessageBox, QListWidgetItem, QFileDialog, QDialog, QApplication, QMainWindow
 import traceback
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
 from email.header import Header
 from email.mime.application import MIMEApplication
-from email.mime.text import MIMEText
-import smtplib
-import subprocess
+import re
+from PySide2.QtGui import QBrush, QColor
 from PySide2.QtCore import QObject, QThread, Qt, Signal, Slot
+from PySide2 import QtCore, QtWidgets
+from typing import List
+import keyring
+import sys
+import ssl
+from os.path import basename
+from email.utils import COMMASPACE, formatdate, formataddr
+from email import encoders
 
 
 
@@ -181,16 +184,18 @@ class EmailEnvelope:
         msg['Date'] = formatdate(localtime=True)
         msg['Subject'] = Header(subject, 'utf-8')
         msg.attach(MIMEText(html.encode('utf-8'), 'html', 'utf-8'))
-        for f in files or []:
-            if not f:
+        for file in files or []:
+            if not file:
                 continue
-            with open(f, "rb") as fil:
-                part = MIMEApplication(
-                    fil.read(),
-                    Name=basename(f)
-                )
-            # After the file is closed
-            part['Content-Disposition'] = 'attachment; filename="{}"'.format(basename(f))
+            ctype, encoding = mimetypes.guess_type(file)
+            if ctype is None or encoding is not None:
+                ctype = 'application/octet-stream'
+            maintype, subtype = ctype.split('/', 1)
+            part = MIMEBase(maintype, subtype)
+            with open(file, "rb") as attachment_file:
+                part.set_payload(attachment_file.read())
+            part.add_header('Content-Disposition', 'attachment', filename=basename(file))
+            encoders.encode_base64(part)
             msg.attach(part)
         mail = dict(from_addr=self.sender_addr,
                     to_addrs=recipients + self.copy_addrs,
