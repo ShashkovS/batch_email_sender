@@ -344,6 +344,7 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
 
 
 def main():
+    print('main func')
     batch_sender_app = QApplication(sys.argv)
     main_window = QMainWindow()
     ui = Extended_GUI(main_window)
@@ -351,5 +352,6 @@ def main():
     sys.exit(batch_sender_app.exec_())
 
 
+print('before name')
 if __name__ == '__main__':
     main()
