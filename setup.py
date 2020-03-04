@@ -88,7 +88,7 @@ setup(
     # py_modules=['mypackage'],
 
     entry_points={
-        'console_scripts': ['batch_email_sender=batch_email_sender.__main__:main'],
+        'console_scripts': ['batch_email_sender=batch_email_sender.batch_email_sender:main'],
     },
     install_requires=REQUIRED,
     include_package_data=True,
