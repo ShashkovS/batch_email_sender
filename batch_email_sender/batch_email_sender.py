@@ -13,10 +13,10 @@ from PySide2.QtWidgets import QMessageBox, QListWidgetItem, QFileDialog, QDialog
 # from PyQt5.QtGui import QBrush, QColor
 # from PyQt5.QtWidgets import QMessageBox, QListWidgetItem, QFileDialog, QDialog, QApplication, QMainWindow
 
-import files_parsers
-import ui_email_and_passw
-import ui_main_window
-import email_stuff
+import batch_email_sender.files_parsers as files_parsers
+import batch_email_sender.ui_email_and_passw as ui_email_and_passw
+import batch_email_sender.ui_main_window as ui_main_window
+import batch_email_sender.email_stuff as email_stuff
 
 
 def excepthook(exc_type, exc_value, traceback_obj):
