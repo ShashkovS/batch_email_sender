@@ -343,9 +343,13 @@ class Extended_GUI(ui_main_window.Ui_MainWindow, QObject):
             self.start_threads_and_send_mails()
 
 
-if __name__ == '__main__':
+def main():
     batch_sender_app = QApplication(sys.argv)
     main_window = QMainWindow()
     ui = Extended_GUI(main_window)
     main_window.show()
     sys.exit(batch_sender_app.exec_())
+
+
+if __name__ == '__main__':
+    main()
